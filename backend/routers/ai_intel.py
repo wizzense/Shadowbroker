@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from auth import require_local_operator, require_openclaw_or_local
+from auth import require_local_operator, require_openclaw_or_local, require_openclaw_write_or_local
 from limiter import limiter
 from services.fetchers._store import latest_data as _latest_data
 
@@ -158,7 +158,7 @@ async def ai_status(request: Request):
 # Pin CRUD
 # ---------------------------------------------------------------------------
 
-@router.post("/api/ai/pins", dependencies=[Depends(require_openclaw_or_local)])
+@router.post("/api/ai/pins", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("60/minute")
 async def create_pin(request: Request, body: PinCreate):
     """Place a single AI Intel pin on the map."""
@@ -183,7 +183,7 @@ async def create_pin(request: Request, body: PinCreate):
     return {"ok": True, "pin": pin}
 
 
-@router.post("/api/ai/pins/batch", dependencies=[Depends(require_openclaw_or_local)])
+@router.post("/api/ai/pins/batch", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("20/minute")
 async def create_pins_batch(request: Request, body: PinBatchCreate):
     """Place multiple AI Intel pins at once (max 100)."""
@@ -211,11 +211,15 @@ async def list_pins(
 
 @router.get("/api/ai/pins/geojson", dependencies=[Depends(require_openclaw_or_local)])
 @limiter.limit("60/minute")
-async def pins_geojson(request: Request, layer_id: str = ""):
-    """Export all active AI Intel pins as GeoJSON for the map layer."""
+async def pins_geojson(request: Request, layer_id: str = "", shapes: bool = False):
+    """Export all active AI Intel pins as GeoJSON for the map layer.
+
+    shapes=true also returns the Polygon/LineString outlines that feed layers
+    carry (properties.kind == "shape"); without it only Point features are sent.
+    """
     from services.ai_pin_store import pins_as_geojson
 
-    return pins_as_geojson(layer_id=layer_id)
+    return pins_as_geojson(layer_id=layer_id, include_shapes=shapes)
 
 
 @router.get("/api/ai/pins/{pin_id}", dependencies=[Depends(require_openclaw_or_local)])
@@ -230,7 +234,7 @@ async def get_pin_detail(request: Request, pin_id: str):
     return {"ok": True, "pin": pin}
 
 
-@router.patch("/api/ai/pins/{pin_id}", dependencies=[Depends(require_openclaw_or_local)])
+@router.patch("/api/ai/pins/{pin_id}", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("60/minute")
 async def patch_pin(request: Request, pin_id: str, body: PinUpdate):
     """Edit a pin's label, description, category, or color."""
@@ -248,7 +252,7 @@ async def patch_pin(request: Request, pin_id: str, body: PinUpdate):
     return {"ok": True, "pin": updated}
 
 
-@router.post("/api/ai/pins/{pin_id}/comments", dependencies=[Depends(require_openclaw_or_local)])
+@router.post("/api/ai/pins/{pin_id}/comments", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("60/minute")
 async def post_pin_comment(request: Request, pin_id: str, body: PinCommentCreate):
     """Append a comment (or reply) to a pin's thread."""
@@ -268,7 +272,7 @@ async def post_pin_comment(request: Request, pin_id: str, body: PinCommentCreate
 
 @router.delete(
     "/api/ai/pins/{pin_id}/comments/{comment_id}",
-    dependencies=[Depends(require_openclaw_or_local)],
+    dependencies=[Depends(require_openclaw_write_or_local)],
 )
 @limiter.limit("60/minute")
 async def delete_pin_comment_route(request: Request, pin_id: str, comment_id: str):
@@ -280,7 +284,7 @@ async def delete_pin_comment_route(request: Request, pin_id: str, comment_id: st
     raise HTTPException(404, "Comment not found")
 
 
-@router.delete("/api/ai/pins/{pin_id}", dependencies=[Depends(require_openclaw_or_local)])
+@router.delete("/api/ai/pins/{pin_id}", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("60/minute")
 async def delete_pin(request: Request, pin_id: str):
     """Delete a single pin by ID."""
@@ -291,7 +295,7 @@ async def delete_pin(request: Request, pin_id: str):
     raise HTTPException(404, f"Pin '{pin_id}' not found")
 
 
-@router.delete("/api/ai/pins", dependencies=[Depends(require_openclaw_or_local)])
+@router.delete("/api/ai/pins", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("10/minute")
 async def clear_pins(
     request: Request,
@@ -309,7 +313,7 @@ async def clear_pins(
 # Pin Layers
 # ---------------------------------------------------------------------------
 
-@router.post("/api/ai/layers", dependencies=[Depends(require_openclaw_or_local)])
+@router.post("/api/ai/layers", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("30/minute")
 async def api_create_layer(request: Request, body: LayerCreate):
     """Create a new pin layer."""
@@ -336,7 +340,7 @@ async def api_list_layers(request: Request):
     return {"ok": True, "count": len(layers), "layers": layers}
 
 
-@router.patch("/api/ai/layers/{layer_id}", dependencies=[Depends(require_openclaw_or_local)])
+@router.patch("/api/ai/layers/{layer_id}", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("30/minute")
 async def api_update_layer(request: Request, layer_id: str, body: LayerUpdate):
     """Update a pin layer (name, visibility, color, etc.)."""
@@ -349,7 +353,7 @@ async def api_update_layer(request: Request, layer_id: str, body: LayerUpdate):
     return {"ok": True, "layer": result}
 
 
-@router.delete("/api/ai/layers/{layer_id}", dependencies=[Depends(require_openclaw_or_local)])
+@router.delete("/api/ai/layers/{layer_id}", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("10/minute")
 async def api_delete_layer(request: Request, layer_id: str):
     """Delete a layer and all its pins."""
@@ -359,7 +363,7 @@ async def api_delete_layer(request: Request, layer_id: str):
     return {"ok": True, "layer_id": layer_id, "pins_removed": removed}
 
 
-@router.post("/api/ai/layers/{layer_id}/refresh", dependencies=[Depends(require_openclaw_or_local)])
+@router.post("/api/ai/layers/{layer_id}/refresh", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("10/minute")
 async def api_refresh_layer_feed(request: Request, layer_id: str):
     """Manually trigger a feed refresh for a layer."""
@@ -395,7 +399,7 @@ class LayerOverrideUpdate(BaseModel):
     ttl_seconds: float = 300.0
 
 
-@router.put("/api/ai/layer-overrides", dependencies=[Depends(require_openclaw_or_local)])
+@router.put("/api/ai/layer-overrides", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("30/minute")
 async def put_layer_overrides(request: Request, body: LayerOverrideUpdate):
     """Replace the override map. Returns which keys were accepted and ignored."""
@@ -415,7 +419,7 @@ async def read_layer_overrides(request: Request):
     return {"ok": True, "overrides": get_layer_overrides()}
 
 
-@router.delete("/api/ai/layer-overrides", dependencies=[Depends(require_openclaw_or_local)])
+@router.delete("/api/ai/layer-overrides", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("30/minute")
 async def delete_layer_overrides(request: Request):
     """Drop all overrides, restoring the operator's own layer state."""
@@ -638,7 +642,7 @@ INJECTABLE_LAYERS = {
 }
 
 
-@router.post("/api/ai/inject", dependencies=[Depends(require_openclaw_or_local)])
+@router.post("/api/ai/inject", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("30/minute")
 async def inject_data(request: Request, body: InjectRequest):
     """Inject custom data through the shared validated layer helper."""
@@ -652,7 +656,7 @@ async def inject_data(request: Request, body: InjectRequest):
     return {**result, "total": total}
 
 
-@router.delete("/api/ai/inject", dependencies=[Depends(require_openclaw_or_local)])
+@router.delete("/api/ai/inject", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("10/minute")
 async def remove_injected(
     request: Request,
@@ -1083,7 +1087,7 @@ def _take_snapshot_internal(
     }
 
 
-@router.post("/api/ai/timemachine/snapshot", dependencies=[Depends(require_openclaw_or_local)])
+@router.post("/api/ai/timemachine/snapshot", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("30/minute")
 async def take_snapshot(request: Request, body: dict = None):
     """Take a snapshot of current telemetry.
@@ -1270,7 +1274,7 @@ def _expand_compressed_entity(layer: str, entity: dict) -> dict:
     return expanded
 
 
-@router.delete("/api/ai/timemachine/snapshots", dependencies=[Depends(require_openclaw_or_local)])
+@router.delete("/api/ai/timemachine/snapshots", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("10/minute")
 async def clear_snapshots(
     request: Request,
@@ -1297,7 +1301,7 @@ async def get_timemachine_config(request: Request):
     return {"ok": True, "config": _timemachine_config}
 
 
-@router.put("/api/ai/timemachine/config", dependencies=[Depends(require_openclaw_or_local)])
+@router.put("/api/ai/timemachine/config", dependencies=[Depends(require_openclaw_write_or_local)])
 @limiter.limit("10/minute")
 async def update_timemachine_config(request: Request, body: dict):
     """Update Time Machine configuration.
@@ -2601,7 +2605,7 @@ async def api_capabilities(request: Request):
                 "PATCH /api/ai/pins/{id}": "Update pin (body: {label, description, category, color})",
                 "DELETE /api/ai/pins/{id}": "Delete pin",
                 "POST /api/ai/pins/batch": "Create up to 200 pins at once (body: {pins: [...]})",
-                "GET /api/ai/pins/geojson": "Pins as GeoJSON FeatureCollection",
+                "GET /api/ai/pins/geojson": "Pins as GeoJSON FeatureCollection (?shapes=true adds feed-layer outlines)",
             },
             "layers": {
                 "POST /api/ai/layers": "Create layer (body: {name, description, color, feed_url, feed_interval})",

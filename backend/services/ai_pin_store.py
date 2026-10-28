@@ -51,6 +51,10 @@ LAYER_COLORS = [
     "#10b981", "#f97316", "#6366f1", "#ec4899", "#14b8a6",
 ]
 
+# Feed pins may carry one of these shapes (validated by services.feed_ingester);
+# the pin's lat/lng is then the shape's label point.
+SHAPE_GEOMETRY_TYPES = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"})
+
 # ---------------------------------------------------------------------------
 # In-memory store
 # ---------------------------------------------------------------------------
@@ -363,7 +367,9 @@ def get_pins(
                 continue
             if layer_id and pin.get("layer_id") != layer_id:
                 continue
-            results.append(pin)
+            # Shapes can be large; the list stays light. Read them via
+            # pins_as_geojson(include_shapes=True) or get_pin().
+            results.append({k: v for k, v in pin.items() if k != "geometry"} if "geometry" in pin else pin)
             if len(results) >= limit:
                 break
         return results
@@ -504,10 +510,23 @@ def get_feed_layers() -> list[dict[str, Any]]:
         return [dict(l) for l in _layers if l.get("feed_url")]
 
 
+def _shape_of(item: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """The feed-validated shape geometry on a pin item, if it has one."""
+    geom = item.get("geometry")
+    if (
+        isinstance(geom, dict)
+        and geom.get("type") in SHAPE_GEOMETRY_TYPES
+        and isinstance(geom.get("coordinates"), list)
+    ):
+        return {"type": geom["type"], "coordinates": geom["coordinates"]}
+    return None
+
+
 def replace_layer_pins(layer_id: str, new_pins: list[dict[str, Any]]) -> int:
     """Atomically replace all pins in a layer with new_pins. Returns count added."""
     now = time.time()
     with _lock:
+        layer_color = next((l.get("color", "") for l in _layers if l["id"] == layer_id), "")
         # Remove old pins for this layer
         _pins[:] = [p for p in _pins if p.get("layer_id") != layer_id]
         # Add new pins
@@ -517,7 +536,11 @@ def replace_layer_pins(layer_id: str, new_pins: list[dict[str, Any]]) -> int:
             cat = item.get("category", "custom")
             if cat not in PIN_CATEGORIES:
                 cat = "custom"
-            pin_color = item.get("color", "") or PIN_COLORS.get(cat, "#3b82f6")
+            shape = _shape_of(item)
+            # A shape with no colour of its own takes the layer's colour, so one
+            # layer's outlines read as one set on the map.
+            default_color = (layer_color if shape else "") or PIN_COLORS.get(cat, "#3b82f6")
+            pin_color = item.get("color", "") or default_color
 
             attachment = None
             ea = item.get("entity_attachment")
@@ -550,6 +573,8 @@ def replace_layer_pins(layer_id: str, new_pins: list[dict[str, Any]]) -> int:
                 "entity_attachment": attachment,
                 "comments": [],
             }
+            if shape:
+                pin["geometry"] = shape
             _pins.append(pin)
             added += 1
         _save_to_disk()
@@ -581,10 +606,17 @@ def pin_count() -> dict[str, int]:
     return counts
 
 
-def pins_as_geojson(layer_id: str = "") -> dict[str, Any]:
-    """Convert active pins to GeoJSON FeatureCollection for the map layer."""
+def pins_as_geojson(layer_id: str = "", include_shapes: bool = False) -> dict[str, Any]:
+    """Convert active pins to GeoJSON FeatureCollection for the map layer.
+
+    Every pin is a Point feature (a shape pin's point is its label point), so
+    existing consumers see the same collection as before. With include_shapes,
+    each shape pin also contributes one feature carrying its Polygon /
+    MultiPolygon / LineString / MultiLineString, with properties.kind == "shape".
+    """
     now = time.time()
     features = []
+    shapes = []
     with _lock:
         # Build set of visible layer IDs
         visible_layers = {l["id"] for l in _layers if l.get("visible", True)}
@@ -627,7 +659,22 @@ def pins_as_geojson(layer_id: str = "") -> dict[str, Any]:
                 },
                 "properties": props,
             })
+
+            shape = pin.get("geometry")
+            if include_shapes and shape:
+                shapes.append({
+                    "type": "Feature",
+                    "geometry": shape,
+                    "properties": {
+                        "id": pin["id"],
+                        "layer_id": pid_layer,
+                        "label": pin["label"],
+                        "category": pin["category"],
+                        "color": pin["color"],
+                        "kind": "shape",
+                    },
+                })
     return {
         "type": "FeatureCollection",
-        "features": features,
+        "features": features + shapes,
     }

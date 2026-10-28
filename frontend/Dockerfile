@@ -15,6 +15,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Default empty = auto-detect from browser hostname at runtime.
 ARG NEXT_PUBLIC_API_URL=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Source-code link shown in the map attribution (AGPL-3.0 §13). Builds of a
+# modified version set this to their own repository; empty = upstream.
+ARG NEXT_PUBLIC_SOURCE_URL=""
+ENV NEXT_PUBLIC_SOURCE_URL=$NEXT_PUBLIC_SOURCE_URL
 RUN npm run build
 
 FROM base AS runner

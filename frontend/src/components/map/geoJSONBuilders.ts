@@ -1400,6 +1400,32 @@ export interface AIIntelPinData {
   } | null;
 }
 
+const AI_INTEL_SHAPE_TYPES = new Set(['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString']);
+
+/**
+ * Split /api/ai/pins/geojson?shapes=true: Point features become pins for the
+ * AI Intel pin layer; feed-layer shapes (properties.kind === 'shape') become
+ * one collection for the outline/fill layers. Anything else is ignored.
+ */
+export function splitAIIntelGeoJSON(gj: { features?: unknown } | null | undefined): {
+  pins: AIIntelPinData[];
+  shapes: FC;
+} {
+  const pins: AIIntelPinData[] = [];
+  const shapes: GeoJSON.Feature[] = [];
+  const features = Array.isArray(gj?.features) ? (gj.features as GeoJSON.Feature[]) : [];
+  for (const f of features) {
+    const geometry = f?.geometry;
+    if (geometry?.type === 'Point') {
+      const [lng, lat] = geometry.coordinates;
+      pins.push({ ...(f.properties as AIIntelPinData), lat, lng });
+    } else if (geometry && AI_INTEL_SHAPE_TYPES.has(geometry.type)) {
+      shapes.push(f);
+    }
+  }
+  return { pins, shapes: shapes.length ? { type: 'FeatureCollection', features: shapes } : null };
+}
+
 /** Resolve the live position of an entity-attached pin from telemetry data. */
 function resolveEntityPosition(
   attachment: NonNullable<AIIntelPinData['entity_attachment']>,

@@ -488,23 +488,51 @@ async def _verify_openclaw_hmac(request: Request) -> bool:
     return True
 
 
+def _openclaw_access_tier() -> str:
+    """The configured OpenClaw tier ("full" or "restricted"); restricted on any doubt."""
+    try:
+        return str(get_settings().OPENCLAW_ACCESS_TIER or "restricted").strip().lower()
+    except Exception:
+        return "restricted"
+
+
 async def require_openclaw_or_local(request: Request):
     """Allow local operator access, admin key, OR valid OpenClaw HMAC signature.
 
     This is used on /api/ai/* routes to permit remote agent access
     without exposing the full admin surface.
     """
+    await _authorize_openclaw_or_local(request)
+
+
+async def require_openclaw_write_or_local(request: Request):
+    """Like require_openclaw_or_local, for routes that change state.
+
+    Local operator and admin-key callers pass as before. An agent that
+    authenticated by OpenClaw HMAC must also hold the "full" access tier: the
+    same rule the command channel applies to WRITE_COMMANDS, so the REST
+    surface cannot be used to do what a restricted agent's commands may not.
+    """
+    if await _authorize_openclaw_or_local(request) == "openclaw" and _openclaw_access_tier() != "full":
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden — this write requires the full OpenClaw access tier",
+        )
+
+
+async def _authorize_openclaw_or_local(request: Request) -> str:
+    """Return how the caller is trusted: "local", "admin" or "openclaw"; else raise 403."""
     host = (request.client.host or "").lower() if request.client else ""
 
     # 1. Local runtime path — loopback, plus bundled Docker bridge when compose opts in
     if _is_trusted_local_runtime_host(host) or (_debug_mode_enabled() and host == "test"):
-        return
+        return "local"
 
     # 2. Admin key — full trust
     admin_key = _current_admin_key()
     presented = str(request.headers.get("X-Admin-Key", "") or "").strip()
     if admin_key and hmac.compare_digest(presented.encode(), admin_key.encode()):
-        return
+        return "admin"
 
     # 3. OpenClaw HMAC — agent-scoped trust
     if await _verify_openclaw_hmac(request):
@@ -527,7 +555,7 @@ async def require_openclaw_or_local(request: Request):
             logger.warning(
                 "HMAC-authenticated request carries unexpected Authorization header"
             )
-        return
+        return "openclaw"
 
     raise HTTPException(status_code=403, detail="Forbidden — authentication required")
 

@@ -204,6 +204,7 @@ import {
   getSentinelToken,
   registerSentinelProtocol,
 } from '@/lib/sentinelHub';
+import { sourceCodeAttributionHtml } from '@/lib/sourceLink';
 import {
   buildEarthquakesGeoJSON,
   buildJammingGeoJSON,
@@ -212,6 +213,7 @@ import {
   buildTinygsGeoJSON,
   buildShodanGeoJSON,
   buildAIIntelGeoJSON,
+  splitAIIntelGeoJSON,
   type AIIntelPinData,
   buildFrontlineGeoJSON,
   buildUavGeoJSON,
@@ -469,6 +471,7 @@ const MaplibreViewer = ({
   const [pinCategory, setPinCategory] = useState<PinCategory>('custom');
   const [pinSaving, setPinSaving] = useState(false);
   const [aiIntelPins, setAiIntelPins] = useState<AIIntelPinData[]>([]);
+  const [aiIntelShapes, setAiIntelShapes] = useState<GeoJSON.FeatureCollection | null>(null);
   const [aiIntelRefreshTick, setAiIntelRefreshTick] = useState(0);
   // Currently-open AI Intel pin detail popup (pin id)
   const [openPinDetailId, setOpenPinDetailId] = useState<string | null>(null);
@@ -836,15 +839,13 @@ const MaplibreViewer = ({
     let cancelled = false;
     const poll = async () => {
       try {
-        const resp = await fetch(`${API_BASE}/api/ai/pins/geojson`);
+        const resp = await fetch(`${API_BASE}/api/ai/pins/geojson?shapes=true`);
         if (!resp.ok || cancelled) return;
-        const gj = await resp.json();
-        const pins = (gj.features || []).map((f: any) => ({
-          ...f.properties,
-          lat: f.geometry?.coordinates?.[1],
-          lng: f.geometry?.coordinates?.[0],
-        }));
-        if (!cancelled) setAiIntelPins(pins);
+        const { pins, shapes } = splitAIIntelGeoJSON(await resp.json());
+        if (!cancelled) {
+          setAiIntelPins(pins);
+          setAiIntelShapes(shapes);
+        }
       } catch {}
     };
     poll();
@@ -855,6 +856,7 @@ const MaplibreViewer = ({
     () => (activeLayers.ai_intel ? buildAIIntelGeoJSON(aiIntelPins, data) : null),
     [activeLayers.ai_intel, aiIntelPins, data],
   );
+  const aiIntelShapesGeoJSON = activeLayers.ai_intel ? aiIntelShapes : null;
 
   const ukraineAlertsGeoJSON = useMemo(
     () => (activeLayers.ukraine_alerts ? buildUkraineAlertsGeoJSON(data?.ukraine_alerts) : null),
@@ -1870,6 +1872,7 @@ const MaplibreViewer = ({
   useImperativeSource(mapForHook, 'correlations', correlationsGeoJSON, 100);
   useImperativeSource(mapForHook, 'shodan-overlay', shodanGeoJSON, 100);
   useImperativeSource(mapForHook, 'ai-intel-source', aiIntelGeoJSON, 80);
+  useImperativeSource(mapForHook, 'ai-intel-shapes-source', aiIntelShapesGeoJSON, 120);
   useImperativeSource(mapForHook, 'ukraine-alerts-source', ukraineAlertsGeoJSON, 120);
   useImperativeSource(mapForHook, 'ukraine-alert-labels-source', ukraineAlertLabelsGeoJSON, 120);
   useImperativeSource(mapForHook, 'weather-alerts-source', weatherAlertsGeoJSON, 120);
@@ -2033,6 +2036,7 @@ const MaplibreViewer = ({
             '<a href="https://meshtastic.liamcottle.net" target="_blank" rel="noopener">Meshtastic map by Liam Cottle</a>',
             'NASA · NOAA · USGS · GDELT',
             '<a href="https://github.com/BigBodyCobain/Shadowbroker/blob/main/DATA-ATTRIBUTION.md" target="_blank" rel="noopener">full sources</a>',
+            sourceCodeAttributionHtml(),
           ]}
         />
         {/* Esri World Imagery — high-res static satellite (zoom 0-18+) */}
@@ -3373,6 +3377,25 @@ const MaplibreViewer = ({
             </Source>
           );
         })()}
+
+        {/* AI Intel shapes — polygon/line feed layers, drawn under the pins (data via useImperativeSource) */}
+        <Source id="ai-intel-shapes-source" type="geojson" data={EMPTY_FC}>
+          <Layer
+            id="ai-intel-shape-fill"
+            type="fill"
+            filter={['match', ['geometry-type'], ['Polygon', 'MultiPolygon'], true, false]}
+            paint={{ 'fill-color': ['to-color', ['get', 'color'], '#8b5cf6'], 'fill-opacity': 0.12 }}
+          />
+          <Layer
+            id="ai-intel-shape-line"
+            type="line"
+            paint={{
+              'line-color': ['to-color', ['get', 'color'], '#8b5cf6'],
+              'line-width': 1.25,
+              'line-opacity': 0.85,
+            }}
+          />
+        </Source>
 
         {/* AI Intel Layer — pins from connected AI agents / AI co-pilot (data via useImperativeSource) */}
         <Source
