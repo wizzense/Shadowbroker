@@ -103,7 +103,39 @@ def _fetch_yfinance_single(symbol: str, period: str = "2d"):
             }
     except Exception as e:
         logger.debug(f"Yfinance error for {symbol}: {e}")
-    return symbol, None
+    # yfinance's impersonating HTTP session gets connection-reset by Yahoo while
+    # the public chart endpoint still answers a plain request; try that before
+    # giving up on the symbol.
+    return symbol, _fetch_yahoo_chart(symbol)
+
+
+def _quote_from_chart(payload: dict):
+    """Build a quote from a Yahoo v8 chart payload, or None."""
+    try:
+        result = payload["chart"]["result"][0]
+        closes = [c for c in result["indicators"]["quote"][0]["close"] if c is not None]
+        meta = result.get("meta") or {}
+        price = float(meta.get("regularMarketPrice") or closes[-1])
+        prev = float(meta.get("chartPreviousClose") or (closes[0] if len(closes) > 1 else price))
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    change = ((price - prev) / prev) * 100 if prev else 0.0
+    if not math.isfinite(price) or not math.isfinite(change):
+        return None
+    return {"price": round(price, 2), "change_percent": round(change, 2), "up": bool(change >= 0)}
+
+
+def _fetch_yahoo_chart(symbol: str):
+    from urllib.parse import quote
+
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(symbol)}?range=2d&interval=1d"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return _quote_from_chart(json.loads(resp.read().decode("utf-8")))
+    except Exception as e:
+        logger.debug(f"Yahoo chart error for {symbol}: {e}")
+        return None
 
 
 @with_retry(max_retries=1, base_delay=1)
