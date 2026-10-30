@@ -29,7 +29,10 @@ function buildCsp(nonce: string, strictScripts = false): string {
     "child-src 'self' blob:",
     "frame-src 'self' https://video.ibm.com https://ustream.tv https://www.ustream.tv https://t.me",
     "media-src 'self' blob:",
-    "frame-ancestors 'none'",
+    // Aitherium surfaces (Veil at aitherium.com / app.aitherium.com) frame the
+    // board as a window; everything else stays refused. CSP replaces
+    // X-Frame-Options, which cannot express an ancestor allowlist.
+    "frame-ancestors 'self' https://aitherium.com https://*.aitherium.com",
     "base-uri 'self'",
     "form-action 'self'",
   ];

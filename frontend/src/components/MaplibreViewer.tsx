@@ -188,6 +188,7 @@ import { MeasurementLayers } from '@/components/map/layers/MeasurementLayers';
 import { sameEntityId } from '@/components/map/featureIds';
 import { buildCctvProxyUrl } from '@/lib/cctvProxy';
 import { sanitizeSubmarineCables } from '@/lib/submarineCables';
+import { useCivicLayers } from '@/components/map/hooks/useCivicLayers';
 import { CctvFullscreenModal } from '@/components/MaplibreViewer/CctvFullscreenModal';
 import { SatellitePopup } from '@/components/MaplibreViewer/popups/SatellitePopup';
 import { ShipPopup } from '@/components/MaplibreViewer/popups/ShipPopup';
@@ -1232,6 +1233,10 @@ const MaplibreViewer = ({
     };
   }, [activeLayers.submarine_cables]);
 
+  // AitherOS Civic Atlas layers (ALPR readers, data centers, federal spending).
+  // Area-scoped upstream, so the hook follows the committed viewport.
+  const civicLayers = useCivicLayers(activeLayers);
+
   const dynamicMapLayers = useDynamicMapLayersWorker(
     {
       commercialFlights: dynamicCommercialFlights,
@@ -1855,6 +1860,9 @@ const MaplibreViewer = ({
   useImperativeSource(mapForHook, 'malware-source', malwareGeoJSON, 100);
   useImperativeSource(mapForHook, 'telegram-osint-source', telegramOsintGeoJSONPlaced, 100);
   useImperativeSource(mapForHook, 'submarine-cables-source', submarineCablesGeoJSON, 600);
+  useImperativeSource(mapForHook, 'civic-alpr-source', civicLayers.alpr, 150);
+  useImperativeSource(mapForHook, 'civic-datacenters-source', civicLayers.datacenters, 150);
+  useImperativeSource(mapForHook, 'civic-projects-source', civicLayers.projects, 150);
   useImperativeSource(mapForHook, 'ships', shipsGeoJSON, 75);
   useImperativeSource(mapForHook, 'meshtastic-source', meshtasticGeoJSON, 60);
   useImperativeSource(mapForHook, 'aprs-source', aprsGeoJSON, 60);
@@ -3946,6 +3954,141 @@ const MaplibreViewer = ({
               'line-color': '#eab308',
               'line-width': ['interpolate', ['linear'], ['zoom'], 2, 0.5, 6, 1.2, 10, 2],
               'line-opacity': 0.75,
+            }}
+          />
+        </Source>
+
+        {/* AitherOS Civic Atlas — ALPR readers (source: AitherOS civic cache) */}
+        <Source
+          id="civic-alpr-source"
+          type="geojson"
+          data={EMPTY_FC}
+          cluster={true}
+          clusterRadius={40}
+          clusterMaxZoom={10}
+        >
+          <Layer
+            id="civic-alpr-clusters"
+            type="circle"
+            filter={['has', 'point_count']}
+            paint={{
+              'circle-color': '#f97316',
+              'circle-radius': ['step', ['get', 'point_count'], 10, 25, 14, 200, 18],
+              'circle-opacity': 0.65,
+              'circle-stroke-width': 1,
+              'circle-stroke-color': '#fdba74',
+            }}
+          />
+          <Layer
+            id="civic-alpr-cluster-count"
+            type="symbol"
+            filter={['has', 'point_count']}
+            layout={{
+              'text-field': '{point_count_abbreviated}',
+              'text-font': ['Noto Sans Bold'],
+              'text-size': 10,
+              'text-allow-overlap': true,
+            }}
+            paint={{ 'text-color': '#ffedd5' }}
+          />
+          <Layer
+            id="civic-alpr-layer"
+            type="circle"
+            filter={['!', ['has', 'point_count']]}
+            paint={{
+              'circle-color': '#fb923c',
+              'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 2.5, 13, 5],
+              'circle-opacity': 0.85,
+              'circle-stroke-width': 1,
+              'circle-stroke-color': 'rgba(0,0,0,0.65)',
+            }}
+          />
+        </Source>
+
+        {/* AitherOS Civic Atlas — data centers mapped by the civic cache */}
+        <Source
+          id="civic-datacenters-source"
+          type="geojson"
+          data={EMPTY_FC}
+          cluster={true}
+          clusterRadius={35}
+          clusterMaxZoom={9}
+        >
+          <Layer
+            id="civic-datacenters-clusters"
+            type="circle"
+            filter={['has', 'point_count']}
+            paint={{
+              'circle-color': '#0ea5e9',
+              'circle-radius': ['step', ['get', 'point_count'], 11, 10, 15, 50, 19],
+              'circle-opacity': 0.6,
+              'circle-stroke-width': 1,
+              'circle-stroke-color': '#7dd3fc',
+            }}
+          />
+          <Layer
+            id="civic-datacenters-cluster-count"
+            type="symbol"
+            filter={['has', 'point_count']}
+            layout={{
+              'text-field': '{point_count_abbreviated}',
+              'text-font': ['Noto Sans Bold'],
+              'text-size': 10,
+              'text-allow-overlap': true,
+            }}
+            paint={{ 'text-color': '#e0f2fe' }}
+          />
+          <Layer
+            id="civic-datacenters-layer"
+            type="circle"
+            filter={['!', ['has', 'point_count']]}
+            paint={{
+              'circle-color': '#22d3ee',
+              'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 6],
+              'circle-opacity': 0.9,
+              'circle-stroke-width': 1,
+              'circle-stroke-color': 'rgba(0,0,0,0.65)',
+            }}
+          />
+        </Source>
+
+        {/* AitherOS Civic Atlas — federal construction spending for the area */}
+        <Source id="civic-projects-source" type="geojson" data={EMPTY_FC}>
+          <Layer
+            id="civic-projects-halo"
+            type="circle"
+            paint={{
+              'circle-color': '#84cc16',
+              'circle-radius': 16,
+              'circle-opacity': 0.18,
+            }}
+          />
+          <Layer
+            id="civic-projects-layer"
+            type="circle"
+            paint={{
+              'circle-color': '#a3e635',
+              'circle-radius': 7,
+              'circle-opacity': 0.95,
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#1a2e05',
+            }}
+          />
+          <Layer
+            id="civic-projects-label"
+            type="symbol"
+            layout={{
+              'text-field': ['get', 'name'],
+              'text-font': ['Noto Sans Regular'],
+              'text-size': 10,
+              'text-offset': [0, 1.4],
+              'text-anchor': 'top',
+              'text-allow-overlap': false,
+            }}
+            paint={{
+              'text-color': '#d9f99d',
+              'text-halo-color': 'rgba(0,0,0,0.9)',
+              'text-halo-width': 1,
             }}
           />
         </Source>

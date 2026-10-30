@@ -212,7 +212,10 @@
     "telegramOsint": "OSINT Telegram",
     "strategicRisk": "Carte de risque stratégique",
     "derivedOsint": "OSINT dérivé (risque stratégique)",
-    "derivedOsintSource": "Expérimental · désactivé par défaut"
+    "derivedOsintSource": "Expérimental · désactivé par défaut",
+    "civicAlpr": "Lecteurs de plaques (ALPR)",
+    "civicDatacenters": "Centres de données (cache civique)",
+    "civicProjects": "Projets de construction fédéraux"
   },
   "gtLean": {
     "title": "Activer l'OSINT dérivé sur un nœud limité ?",

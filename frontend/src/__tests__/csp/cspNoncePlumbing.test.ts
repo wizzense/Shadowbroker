@@ -112,7 +112,7 @@ describe('next.config.ts CSP removal', () => {
       .map((h: { key: string }) => h.key);
     expect(allKeys).toContain('Referrer-Policy');
     expect(allKeys).toContain('X-Content-Type-Options');
-    expect(allKeys).toContain('X-Frame-Options');
+    expect(allKeys).not.toContain('X-Frame-Options');
   });
 });
 
@@ -245,8 +245,11 @@ describe('production CSP directive completeness', () => {
     expect(csp).toContain("object-src 'none'");
   });
 
-  it('has frame-ancestors none', () => {
-    expect(csp).toContain("frame-ancestors 'none'");
+  it('has frame-ancestors allowing only Aitherium ancestors', () => {
+    expect(csp).toContain(
+      "frame-ancestors 'self' https://aitherium.com https://*.aitherium.com",
+    );
+    expect(csp).not.toContain("frame-ancestors 'none'");
   });
 
   it('has base-uri self', () => {

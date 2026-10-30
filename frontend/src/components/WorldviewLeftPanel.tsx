@@ -124,6 +124,9 @@ const FRESHNESS_MAP: Record<string, string> = {
   cyber_threats: 'cyber_threats',
   telegram_osint: 'telegram_osint',
   gt_risk: 'gt_risk',
+  civic_alpr: '',
+  civic_datacenters: '',
+  civic_projects: '',
 };
 
 // POTUS fleet ICAO hex codes for client-side filtering
@@ -1351,6 +1354,27 @@ const WorldviewLeftPanel = React.memo(function WorldviewLeftPanel({
           source: 'DC Map (GitHub)',
           count: data?.datacenters?.length || 0,
           icon: Server,
+        },
+        {
+          id: 'civic_alpr',
+          name: t('layers.civicAlpr'),
+          source: 'AitherOS Civic · OSM/DeFlock',
+          count: null,
+          icon: Radar,
+        },
+        {
+          id: 'civic_datacenters',
+          name: t('layers.civicDatacenters'),
+          source: 'AitherOS Civic · OSM',
+          count: null,
+          icon: Server,
+        },
+        {
+          id: 'civic_projects',
+          name: t('layers.civicProjects'),
+          source: 'USAspending.gov · place of performance',
+          count: null,
+          icon: Truck,
         },
         {
           id: 'internet_outages',

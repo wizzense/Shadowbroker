@@ -89,6 +89,9 @@ export function getDefaultActiveLayers(): ActiveLayers {
     shodan_overlay: false,
     ai_intel: true,
     sar: true,
+    civic_alpr: false,
+    civic_datacenters: false,
+    civic_projects: false,
   };
 }
 

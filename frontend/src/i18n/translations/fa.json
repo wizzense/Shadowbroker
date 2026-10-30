@@ -212,7 +212,10 @@
     "telegramOsint": "OSINT تلگرام",
     "strategicRisk": "ریسک راهبردی",
     "derivedOsint": "OSINT استنتاجی (ریسک راهبردی)",
-    "derivedOsintSource": "آزمایشی · به‌طور پیش‌فرض غیرفعال"
+    "derivedOsintSource": "آزمایشی · به‌طور پیش‌فرض غیرفعال",
+    "civicAlpr": "دوربین‌های پلاک‌خوان (ALPR)",
+    "civicDatacenters": "مراکز داده (حافظه مدنی)",
+    "civicProjects": "پروژه‌های ساخت فدرال"
   },
   "gtLean": {
     "title": "فعال‌سازی OSINT استنتاجی روی یک گره با منابع محدود؟",

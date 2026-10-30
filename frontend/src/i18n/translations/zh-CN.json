@@ -212,7 +212,10 @@
     "telegramOsint": "Telegram OSINT",
     "strategicRisk": "战略风险热力图",
     "derivedOsint": "衍生 OSINT（战略风险）",
-    "derivedOsintSource": "实验功能 · 默认关闭"
+    "derivedOsintSource": "实验功能 · 默认关闭",
+    "civicAlpr": "车牌识别摄像头 (ALPR)",
+    "civicDatacenters": "数据中心（公共缓存）",
+    "civicProjects": "联邦建设项目"
   },
   "gtLean": {
     "title": "在低配节点上启用衍生 OSINT？",

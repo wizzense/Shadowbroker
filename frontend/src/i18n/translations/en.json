@@ -212,7 +212,10 @@
     "telegramOsint": "Telegram OSINT",
     "strategicRisk": "Strategic Risk Heatmap",
     "derivedOsint": "Derived OSINT (Strategic Risk)",
-    "derivedOsintSource": "Experimental · off by default"
+    "derivedOsintSource": "Experimental · off by default",
+    "civicAlpr": "License-plate readers (ALPR)",
+    "civicDatacenters": "Data centers (civic cache)",
+    "civicProjects": "Federal construction projects"
   },
   "gtLean": {
     "title": "Enable Derived OSINT on a lean node?",

@@ -159,8 +159,10 @@ describe('unchanged directives in production', () => {
     expect(getCsp()).toContain("object-src 'none'");
   });
 
-  it('frame-ancestors none', () => {
-    expect(getCsp()).toContain("frame-ancestors 'none'");
+  it('frame-ancestors allows the Aitherium surfaces', () => {
+    expect(getCsp()).toContain(
+      "frame-ancestors 'self' https://aitherium.com https://*.aitherium.com",
+    );
   });
 
   it('base-uri self', () => {

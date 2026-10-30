@@ -1306,6 +1306,10 @@ export interface ActiveLayers {
   cyber_threats: boolean;
   telegram_osint: boolean;
   gt_risk: boolean;
+  // AitherOS Civic Atlas (area-scoped feeds served by /api/civic-proxy)
+  civic_alpr: boolean;
+  civic_datacenters: boolean;
+  civic_projects: boolean;
 }
 
 export interface SelectedEntity {

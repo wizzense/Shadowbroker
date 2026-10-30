@@ -27,10 +27,10 @@ const securityHeaders = [
     key: 'X-Content-Type-Options',
     value: 'nosniff',
   },
-  {
-    key: 'X-Frame-Options',
-    value: 'DENY',
-  },
+  // X-Frame-Options is deliberately NOT sent: it cannot express an ancestor
+  // allowlist (DENY/ALLOW-FROM is dead), and aitherium.com frames this board as
+  // an app window. Framing is governed by the CSP frame-ancestors directive
+  // emitted per-request in src/proxy.ts.
 ];
 
 const nextConfig: NextConfig = {
