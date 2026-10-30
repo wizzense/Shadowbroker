@@ -21,6 +21,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 _start_time = time.time()
 _MESH_ONLY = os.environ.get("MESH_ONLY", "").strip().lower() in ("1", "true", "yes")
+
+
+def _mesh_agent_channel_enabled() -> bool:
+    """Opt-in: expose the agent channel on a MESH_ONLY node (default off)."""
+    return os.environ.get("MESH_AGENT_CHANNEL", "").strip().lower() in ("1", "true", "yes")
+
 _HEADLESS_MESH_NODE_RUNTIME = os.environ.get("SHADOWBROKER_MESH_NODE_RUNTIME", "").strip().lower() in (
     "1",
     "true",
@@ -395,7 +401,13 @@ if _MESH_ONLY:
     tools_router = APIRouter()
     admin_router = APIRouter()
     data_router = APIRouter()
-    ai_intel_router = APIRouter()
+    # MESH_AGENT_CHANNEL=true keeps the HMAC agent channel (/api/ai/channel/*) on a
+    # mesh-only node, so an operator's bridge can read and post gates through the
+    # node's OWN identity. OSINT commands answer empty there; gate commands work.
+    if _mesh_agent_channel_enabled():
+        ai_intel_router = _load_optional_router("routers.ai_intel")
+    else:
+        ai_intel_router = APIRouter()
     sar_router = APIRouter()
     road_corridors_router = APIRouter()
     osint_router = APIRouter()
