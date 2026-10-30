@@ -26,6 +26,31 @@ TICKERS_CRYPTO = [
     ("ADA", "BINANCE:ADAUSDT", "ADA-USD"),
 ]
 
+# Operator watchlist: FINANCIAL_WATCHLIST="DJT,TSLA,XOM" adds symbols to the
+# stock rotation. Malformed entries are dropped, duplicates collapse, and the
+# list is capped so a long env value cannot multiply Yahoo/Finnhub calls.
+_WATCHLIST_MAX = 40
+_SYMBOL_OK = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-^=")
+
+
+def parse_watchlist(raw: str | None) -> list[str]:
+    out: list[str] = []
+    for part in (raw or "").split(","):
+        sym = part.strip().upper()
+        if not sym or len(sym) > 12 or not set(sym) <= _SYMBOL_OK or sym in out:
+            continue
+        out.append(sym)
+        if len(out) >= _WATCHLIST_MAX:
+            break
+    return out
+
+
+def stock_symbols() -> list[str]:
+    """Built-in tech + defense tickers, then the operator watchlist, deduped."""
+    base = TICKERS_TECH + TICKERS_DEFENSE
+    return base + [s for s in parse_watchlist(os.environ.get("FINANCIAL_WATCHLIST")) if s not in base]
+
+
 # Ticker priority for high-frequency updates (we update these every tick)
 PRIORITY_SYMBOLS = ["BTC", "ETH", "NVDA", "PLTR"]
 
@@ -127,7 +152,7 @@ def fetch_financial_markets():
     
     # Prepare symbol lists
     all_crypto = {label: (f_sym, y_sym) for label, f_sym, y_sym in TICKERS_CRYPTO}
-    all_stocks = TICKERS_TECH + TICKERS_DEFENSE
+    all_stocks = stock_symbols()
     
     subset_to_fetch = []
     
