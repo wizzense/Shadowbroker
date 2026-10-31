@@ -115,9 +115,17 @@ function pointFeature(
 }
 
 /** Keep only well-formed Points, cap the payload, and drop upstream-only fields. */
+/** Entity `type` the map click handler and popups key on, per civic point layer. */
+export const CIVIC_ENTITY_TYPE = {
+  alpr: 'civic_alpr',
+  datacenters: 'civic_datacenter',
+  projects: 'civic_project',
+} as const;
+
 export function sanitizeCivicPoints(
   raw: unknown,
   limit = 20000,
+  entityType: string = CIVIC_ENTITY_TYPE.alpr,
 ): GeoJSON.FeatureCollection<GeoJSON.Point> | null {
   if (!raw || typeof raw !== 'object') return null;
   const fc = raw as { type?: string; features?: unknown };
@@ -128,7 +136,16 @@ export function sanitizeCivicPoints(
     const f = item as { geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> } | null;
     if (!f || typeof f !== 'object') continue;
     const props = f.properties && typeof f.properties === 'object' ? f.properties : {};
-    const feature = pointFeature(f.geometry?.coordinates, {
+    const coords = f.geometry?.coordinates;
+    const lng = Array.isArray(coords) ? coords[0] : undefined;
+    const lat = Array.isArray(coords) ? coords[1] : undefined;
+    const feature = pointFeature(coords, {
+      // `type` + `id` make the point selectable by the map's click handler;
+      // lat/lng let the popup anchor without re-reading the geometry.
+      type: entityType,
+      id: `${entityType}-${features.length}`,
+      lat: finite(lat) ? lat : 0,
+      lng: finite(lng) ? lng : 0,
       name: typeof props.name === 'string' ? props.name : '',
       operator: typeof props.operator === 'string' ? props.operator : '',
       status: typeof props.status === 'string' ? props.status : '',
@@ -173,6 +190,10 @@ export function buildCivicProjectsGeoJSON(
   const records = [...top, ...grants].slice(0, 10);
   const label = areaLabel(answer) || `${q.lat.toFixed(2)}, ${q.lng.toFixed(2)}`;
   const feature = pointFeature([q.lng, q.lat], {
+    type: CIVIC_ENTITY_TYPE.projects,
+    id: `${CIVIC_ENTITY_TYPE.projects}-${civicQueryKey(q)}`,
+    lat: q.lat,
+    lng: q.lng,
     name: `Federal $${Math.round(total).toLocaleString('en-US')} · ${label}`,
     area: label,
     total,

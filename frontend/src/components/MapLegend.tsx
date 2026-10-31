@@ -222,8 +222,11 @@ const LEGEND: LegendCategory[] = [
     items: [
       {
         svg: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.5"><rect x="3" y="3" width="18" height="6" rx="1" fill="#2e1065"/><rect x="3" y="11" width="18" height="6" rx="1" fill="#2e1065"/><circle cx="7" cy="6" r="1" fill="#a78bfa"/><circle cx="7" cy="14" r="1" fill="#a78bfa"/></svg>`,
-        label: 'Data Center',
+        label: 'Data Center (DC Map)',
       },
+      { svg: dot('#22d3ee'), label: 'Data center — AitherOS Civic (cyan dot, click for detail)' },
+      { svg: clusterCircle('#0ea5e9', '#7dd3fc'), label: 'Civic data-center cluster (count inside)' },
+      { svg: circle('#a3e635'), label: 'Federal construction $ for the area (lime pin)' },
       { svg: circle('#888'), label: 'Internet Outage Zone (grey)' },
     ],
   },
@@ -231,8 +234,10 @@ const LEGEND: LegendCategory[] = [
     name: 'SURVEILLANCE / CCTV',
     color: 'text-green-400 border-green-500/30',
     items: [
-      { svg: dot('#22c55e'), label: 'Individual CCTV camera (green dot)' },
-      { svg: clusterCircle('#22c55e', '#16a34a'), label: 'Camera cluster (count inside)' },
+      { svg: dot('#ffffff'), label: 'Individual CCTV camera (white dot)' },
+      { svg: clusterCircle('#ffffff', '#a0a0a0'), label: 'Camera cluster (count inside, click to zoom)' },
+      { svg: dot('#fb923c'), label: 'License-plate reader / Flock ALPR (orange dot)' },
+      { svg: clusterCircle('#f97316', '#fdba74'), label: 'ALPR cluster (orange, count inside, click to zoom)' },
       {
         svg: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="cyan" stroke-width="2"><path d="M16.75 12h3.632a1 1 0 0 1 .894 1.447l-2.034 4.069a1 1 0 0 1-.894.553H5.652a1 1 0 0 1-.894-.553L2.724 13.447A1 1 0 0 1 3.618 12h3.632M14 12V8a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v4a4 4 0 1 0 8 0Z" /></svg>`,
         label: 'CCTV icon (detail view)',

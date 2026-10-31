@@ -17,6 +17,7 @@ import { getLiveDataBounds } from '@/lib/liveDataViewport';
 import { VIEWPORT_COMMITTED_EVENT } from '@/components/map/hooks/useViewportBounds';
 import {
   buildCivicProjectsGeoJSON,
+  CIVIC_ENTITY_TYPE,
   civicLayerUrl,
   civicQueryFromBounds,
   civicQueryKey,
@@ -88,7 +89,7 @@ export function useCivicLayers(activeLayers: Pick<ActiveLayers, CivicLayerKey>):
           fetchJson(civicLayerUrl('civic_alpr', query), signal)
             .then((raw) => {
               if (cancelled) return;
-              setState((prev) => ({ ...prev, alpr: sanitizeCivicPoints(raw) }));
+              setState((prev) => ({ ...prev, alpr: sanitizeCivicPoints(raw, 20000, CIVIC_ENTITY_TYPE.alpr) }));
             })
             .catch(() => undefined),
         );
@@ -100,7 +101,7 @@ export function useCivicLayers(activeLayers: Pick<ActiveLayers, CivicLayerKey>):
           fetchJson(civicLayerUrl('civic_datacenters', query), signal)
             .then((raw) => {
               if (cancelled) return;
-              setState((prev) => ({ ...prev, datacenters: sanitizeCivicPoints(raw) }));
+              setState((prev) => ({ ...prev, datacenters: sanitizeCivicPoints(raw, 20000, CIVIC_ENTITY_TYPE.datacenters) }));
             })
             .catch(() => undefined),
         );

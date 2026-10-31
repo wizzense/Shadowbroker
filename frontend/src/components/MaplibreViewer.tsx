@@ -1784,6 +1784,14 @@ const MaplibreViewer = ({
     malwareGeoJSON && 'malware-clusters',
     malwareGeoJSON && 'malware-layer',
     submarineCablesGeoJSON && 'submarine-cables-layer',
+    civicLayers.alpr && 'civic-alpr-clusters',
+    civicLayers.alpr && 'civic-alpr-cluster-count',
+    civicLayers.alpr && 'civic-alpr-layer',
+    civicLayers.datacenters && 'civic-datacenters-clusters',
+    civicLayers.datacenters && 'civic-datacenters-cluster-count',
+    civicLayers.datacenters && 'civic-datacenters-layer',
+    civicLayers.projects && 'civic-projects-layer',
+    civicLayers.projects && 'civic-projects-halo',
     sarAnomaliesGeoJSON && 'sar-anomalies-layer',
     sarAoisGeoJSON && 'sar-aois-fill',
     aiIntelGeoJSON && 'ai-intel-clusters',
@@ -5588,6 +5596,125 @@ const MaplibreViewer = ({
                     <span className="text-amber-200 font-mono">
                       {lat.toFixed(3)}, {lng.toFixed(3)}
                     </span>
+                  </div>
+                </div>
+              </Popup>
+            );
+          })()}
+
+        {/* AitherOS Civic Atlas click popup — ALPR readers, civic data centers, federal projects */}
+        {(selectedEntity?.type === 'civic_alpr' ||
+          selectedEntity?.type === 'civic_datacenter' ||
+          selectedEntity?.type === 'civic_project') &&
+          (() => {
+            const p = (selectedEntity.extra || {}) as Record<string, unknown>;
+            const lat = Number(p.lat);
+            const lng = Number(p.lng);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            const str = (v: unknown) => (typeof v === 'string' ? v : '');
+            const kind = selectedEntity.type;
+            const title =
+              kind === 'civic_alpr'
+                ? 'LICENSE-PLATE READER (ALPR)'
+                : kind === 'civic_datacenter'
+                  ? 'DATA CENTER (CIVIC)'
+                  : 'FEDERAL CONSTRUCTION SPENDING';
+            const accent =
+              kind === 'civic_alpr' ? '#fb923c' : kind === 'civic_datacenter' ? '#22d3ee' : '#a3e635';
+            // MapLibre serialises nested arrays in feature properties to JSON strings.
+            let awards: Array<Record<string, unknown>> = [];
+            if (kind === 'civic_project') {
+              try {
+                const raw = typeof p.awards === 'string' ? JSON.parse(p.awards) : p.awards;
+                if (Array.isArray(raw)) awards = raw as Array<Record<string, unknown>>;
+              } catch {
+                awards = [];
+              }
+            }
+            const money = (n: unknown) =>
+              `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+            const rows = (
+              [
+                ['Operator', str(p.operator)],
+                ['Make', str(p.make)],
+                ['Facing', str(p.direction)],
+                ['Status', str(p.status)],
+                ['Area', str(p.area)],
+                ['Period', kind === 'civic_project' ? str(p.period) : ''],
+              ] as Array<[string, string]>
+            ).filter(([, v]) => v);
+            return (
+              <Popup
+                longitude={lng}
+                latitude={lat}
+                closeButton={false}
+                closeOnClick={false}
+                onClose={() => onEntityClick?.(null)}
+                className="threat-popup"
+                maxWidth="320px"
+              >
+                <div
+                  className="map-popup bg-[#0b0f14] text-[#e5e7eb] min-w-[220px]"
+                  style={{ border: `1px solid ${accent}66` }}
+                >
+                  <div className="flex items-start gap-2 border-b pb-1" style={{ borderColor: `${accent}33` }}>
+                    <div className="map-popup-title" style={{ color: accent }}>
+                      {str(p.name) ||
+                        (kind === 'civic_alpr'
+                          ? 'Unnamed camera'
+                          : kind === 'civic_datacenter'
+                            ? 'Unnamed facility'
+                            : 'Federal spending')}
+                    </div>
+                    <button
+                      onClick={() => onEntityClick?.(null)}
+                      className="ml-auto text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {rows.map(([k, v]) => (
+                    <div key={k} className="map-popup-row">
+                      {k}: <span className="text-white">{v}</span>
+                    </div>
+                  ))}
+                  {kind === 'civic_project' && (
+                    <div className="map-popup-row">
+                      Contracts {money(p.contracts_total)} · Grants {money(p.grants_total)}
+                    </div>
+                  )}
+                  {awards.length > 0 && (
+                    <div className="mt-1 max-h-[180px] overflow-y-auto styled-scrollbar">
+                      {awards.slice(0, 10).map((a, i) => (
+                        <div key={i} className="text-[10px] py-0.5 border-b border-white/5">
+                          <span style={{ color: accent }}>{money(a.amount)}</span>{' '}
+                          <span className="text-white">{str(a.recipient)}</span>
+                          {str(a.agency) && (
+                            <span className="text-[var(--text-secondary)]"> · {str(a.agency)}</span>
+                          )}
+                          {str(a.description) && (
+                            <div className="text-[var(--text-secondary)]">{str(a.description)}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="map-popup-row text-[var(--text-secondary)]">
+                    {lat.toFixed(5)}, {lng.toFixed(5)}
+                  </div>
+                  {str(p.osm_url) && (
+                    <a
+                      href={str(p.osm_url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] underline"
+                      style={{ color: accent }}
+                    >
+                      View on OpenStreetMap
+                    </a>
+                  )}
+                  <div className="mt-1.5 text-[9px] tracking-wider" style={{ color: `${accent}aa` }}>
+                    {title} · AITHEROS CIVIC
                   </div>
                 </div>
               </Popup>
