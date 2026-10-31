@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from '@/lib/motion';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import ExternalImage from '@/components/ExternalImage';
 import { useTranslation } from '@/i18n';
+import { CIVIC_BOUNDARY_STYLE, CIVIC_BOUNDARY_TOGGLE_KEYS } from '@/lib/civicDirectory';
 
 // ─── Inline SVG legend icons (small, crisp, no external deps) ───
 const plane = (fill: string, size = 16) =>
@@ -68,6 +69,10 @@ const square = (fill: string, size = 16) =>
 
 const clusterCircle = (fill: string, stroke: string, size = 16) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="0.8"/><text x="12" y="15" text-anchor="middle" fill="white" font-size="8" font-family="monospace" font-weight="bold">5</text></svg>`;
+
+/** A short boundary-line swatch, dashed when the map line is dashed. */
+const boundaryLine = (stroke: string, dash?: number[], size = 16) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" fill="${stroke}" fill-opacity="0.12" stroke="${stroke}" stroke-width="2"${dash ? ` stroke-dasharray="${dash.map((d) => d * 2).join(' ')}"` : ''}/></svg>`;
 
 const LEGEND: LegendCategory[] = [
   {
@@ -228,6 +233,20 @@ const LEGEND: LegendCategory[] = [
       { svg: clusterCircle('#0ea5e9', '#7dd3fc'), label: 'Civic data-center cluster (count inside)' },
       { svg: circle('#a3e635'), label: 'Federal construction $ for the area (lime pin)' },
       { svg: circle('#888'), label: 'Internet Outage Zone (grey)' },
+    ],
+  },
+  {
+    name: 'CIVIC — ELECTIONS & DISTRICTS',
+    color: 'text-violet-300 border-violet-500/30',
+    items: [
+      ...CIVIC_BOUNDARY_TOGGLE_KEYS.map((k) => ({
+        svg: boundaryLine(CIVIC_BOUNDARY_STYLE[k].color, CIVIC_BOUNDARY_STYLE[k].dash),
+        label: `${CIVIC_BOUNDARY_STYLE[k].label} — click for its officials`,
+      })),
+      {
+        svg: circle('#c4b5fd'),
+        label: 'Who represents here — click empty map; officials, elections and how-to-vote open in the CIVIC panel',
+      },
     ],
   },
   {

@@ -215,7 +215,15 @@
     "derivedOsintSource": "آزمایشی · به‌طور پیش‌فرض غیرفعال",
     "civicAlpr": "دوربین‌های پلاک‌خوان (ALPR)",
     "civicDatacenters": "مراکز داده (حافظه مدنی)",
-    "civicProjects": "پروژه‌های ساخت فدرال"
+    "civicProjects": "پروژه‌های ساخت فدرال",
+    "civic": "مدنی و انتخابات",
+    "civicRepresentatives": "نمایندگان این مکان (روی نقشه کلیک کنید)",
+    "civicCongressional": "حوزه‌های کنگره",
+    "civicStateSenate": "حوزه‌های سنای ایالتی",
+    "civicStateHouse": "حوزه‌های مجلس ایالتی",
+    "civicSchoolDistricts": "مناطق آموزشی",
+    "civicCounties": "شهرستان‌ها",
+    "civicPlaces": "شهرها و شهرک‌ها"
   },
   "gtLean": {
     "title": "فعال‌سازی OSINT استنتاجی روی یک گره با منابع محدود؟",

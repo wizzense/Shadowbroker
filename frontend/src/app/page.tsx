@@ -22,6 +22,7 @@ import ShodanPanel from '@/components/ShodanPanel';
 import ReconPanel from '@/components/ReconPanel';
 import ScmPanel from '@/components/ScmPanel';
 import CyberThreatPanel from '@/components/CyberThreatPanel';
+import CivicPanel from '@/components/CivicPanel';
 import EntityGraphPanel from '@/components/EntityGraphPanel';
 import { isEntityGraphEligible } from '@/lib/entityGraph';
 import AIIntelPanel from '@/components/AIIntelPanel';
@@ -709,6 +710,7 @@ export default function Dashboard() {
                   <ReconPanel />
                   <ScmPanel layerEnabled={activeLayers.scm_suppliers} />
                   <CyberThreatPanel layerEnabled={activeLayers.cyber_threats} />
+                  <CivicPanel layerEnabled={activeLayers.civic_representatives} />
                 </div>
               )}
 

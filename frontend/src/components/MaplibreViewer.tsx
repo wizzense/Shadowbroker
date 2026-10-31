@@ -189,6 +189,9 @@ import { sameEntityId } from '@/components/map/featureIds';
 import { buildCctvProxyUrl } from '@/lib/cctvProxy';
 import { sanitizeSubmarineCables } from '@/lib/submarineCables';
 import { useCivicLayers } from '@/components/map/hooks/useCivicLayers';
+import { useCivicBoundaries } from '@/components/map/hooks/useCivicBoundaries';
+import CivicBoundaryLayers, { civicBoundaryInteractiveIds } from '@/components/map/CivicBoundaryLayers';
+import { civicLookupFromMapClick, dispatchCivicLookup } from '@/lib/civicDirectory';
 import { CctvFullscreenModal } from '@/components/MaplibreViewer/CctvFullscreenModal';
 import { SatellitePopup } from '@/components/MaplibreViewer/popups/SatellitePopup';
 import { ShipPopup } from '@/components/MaplibreViewer/popups/ShipPopup';
@@ -1236,6 +1239,8 @@ const MaplibreViewer = ({
   // AitherOS Civic Atlas layers (ALPR readers, data centers, federal spending).
   // Area-scoped upstream, so the hook follows the committed viewport.
   const civicLayers = useCivicLayers(activeLayers);
+  // Civic district boundaries for the state(s) in view; clicking one asks who represents there.
+  const civicBoundaries = useCivicBoundaries(activeLayers);
 
   const dynamicMapLayers = useDynamicMapLayersWorker(
     {
@@ -1802,6 +1807,7 @@ const MaplibreViewer = ({
     correlationsGeoJSON && 'corr-contra-fill',
     correlationsGeoJSON && 'corr-analysis-fill',
     gtRiskGeoJSON && 'gt-risk-heatmap',
+  ...civicBoundaryInteractiveIds(civicBoundaries),
   ].filter(Boolean) as string[];
 
   useEffect(() => {
@@ -1990,6 +1996,15 @@ const MaplibreViewer = ({
                 entity_label: String(clickedProps.name || clickedProps.callsign || clickedProps.label || ''),
               } : null,
             });
+            return;
+          }
+          // Civic: a click on a district boundary (or on empty map with "who
+          // represents here" on) looks up that point's officials. Never steals
+          // a click from an entity under the cursor.
+          const civicHit = civicLookupFromMapClick(e.lngLat, e.features, !!activeLayers.civic_representatives);
+          if (civicHit) {
+            dispatchCivicLookup(civicHit);
+            if (selectedEntity) onEntityClick?.(null);
             return;
           }
           // AI Intel pin click → open detail popup (takes precedence over entity selection)
@@ -3965,6 +3980,9 @@ const MaplibreViewer = ({
             }}
           />
         </Source>
+
+        {/* AitherOS Civic Atlas — district boundaries (TIGERweb via AitherOS) */}
+        <CivicBoundaryLayers state={civicBoundaries} />
 
         {/* AitherOS Civic Atlas — ALPR readers (source: AitherOS civic cache) */}
         <Source

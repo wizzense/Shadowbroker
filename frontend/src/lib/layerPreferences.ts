@@ -17,6 +17,7 @@ export const LAYER_SECTION_IDS = [
   'uap',
   'biosurveillance',
   'infrastructure',
+  'civic',
   'shodan',
   'sigint',
   'overlays',
@@ -92,6 +93,13 @@ export function getDefaultActiveLayers(): ActiveLayers {
     civic_alpr: false,
     civic_datacenters: false,
     civic_projects: false,
+    civic_representatives: false,
+    civic_congressional: false,
+    civic_state_senate: false,
+    civic_state_house: false,
+    civic_school_districts: false,
+    civic_counties: false,
+    civic_places: false,
   };
 }
 

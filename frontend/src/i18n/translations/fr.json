@@ -215,7 +215,15 @@
     "derivedOsintSource": "Expérimental · désactivé par défaut",
     "civicAlpr": "Lecteurs de plaques (ALPR)",
     "civicDatacenters": "Centres de données (cache civique)",
-    "civicProjects": "Projets de construction fédéraux"
+    "civicProjects": "Projets de construction fédéraux",
+    "civic": "Civique et élections",
+    "civicRepresentatives": "Qui représente ce lieu (cliquer sur la carte)",
+    "civicCongressional": "Circonscriptions du Congrès",
+    "civicStateSenate": "Circonscriptions du Sénat de l'État",
+    "civicStateHouse": "Circonscriptions de la Chambre de l'État",
+    "civicSchoolDistricts": "Districts scolaires",
+    "civicCounties": "Comtés",
+    "civicPlaces": "Villes et communes"
   },
   "gtLean": {
     "title": "Activer l'OSINT dérivé sur un nœud limité ?",

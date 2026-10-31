@@ -1,5 +1,13 @@
 /**
- * AitherOS Civic Atlas proxy — GET only, three allowlisted layers.
+ * AitherOS Civic Atlas proxy — GET only, allowlisted routes.
+ *
+ * Routes (validation lives in `lib/civicDirectory.ts::resolveCivicProxyRequest`):
+ *   /api/civic-proxy/{alpr|datacenters|projects}   point layers (/civic/layers/*)
+ *   /api/civic-proxy/lookup?lat=&lng=              districts + officials (no addresses)
+ *   /api/civic-proxy/how-to-vote/{STATE}
+ *   /api/civic-proxy/geojson/{layer}?state=XX       district boundaries
+ *   /api/civic-proxy/units?state=&county=&kind=     local-government directory
+ *   /api/civic-proxy/elections?state=&district=     upcoming elections
  *
  * Why this exists instead of the browser calling aitherium.com:
  *  1. CORS. The civic layers are served by AitherOS (Veil -> Genesis) and send
@@ -14,46 +22,60 @@
  * be re-pointed without a rebuild:
  *   CIVIC_API_BASE=https://app.aitherium.com/api/civic   (default)
  *
- * The layer set is an allowlist, the verb is GET, and nothing from the caller
- * is echoed into the upstream URL beyond the query string we validate.
+ * The route set is an allowlist, the verb is GET, and the upstream URL is built
+ * only from constants and validated tokens — unknown query keys are dropped.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveCivicProxyRequest, type CivicRouteKind } from '@/lib/civicDirectory';
 
-const ALLOWED_LAYERS = new Set(['alpr', 'datacenters', 'projects']);
-const QUERY_KEYS = new Set(['lat', 'lng', 'radius_km', 'state', 'county', 'cd', 'format', 'leads']);
-const CACHE_TTL_MS = 15 * 60 * 1000;
-const STALE_TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_CACHE_ENTRIES = 96;
-const UPSTREAM_TIMEOUT_MS = 20000;
-/** After a 429/503 from the upstream, stop asking for this long. */
+/** Serve a cached copy this long after a failed refresh. */
+const MIN_STALE_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 160;
+/** A state boundary layer is up to ~1 MB; cap the whole cache, not just its entry count. */
+const MAX_CACHE_BYTES = 48 * 1024 * 1024;
+/** After a 429/503 from the upstream, stop asking that route kind for this long. */
 const UPSTREAM_COOLDOWN_MS = 60 * 1000;
 
 type CacheEntry = {
   body: string;
   contentType: string;
   storedAt: number;
+  ttlMs: number;
 };
 
 const cache = new Map<string, CacheEntry>();
-let upstreamBlockedUntil = 0;
+let cacheBytes = 0;
+/** Per route kind: one route's 503 ("directory not loaded") must not silence the others. */
+const upstreamBlockedUntil = new Map<CivicRouteKind, number>();
 
 function civicApiBase(): string {
   return (process.env.CIVIC_API_BASE || 'https://app.aitherium.com/api/civic').replace(/\/+$/, '');
 }
 
-function remember(key: string, entry: CacheEntry): void {
+function forget(key: string): void {
+  const old = cache.get(key);
+  if (old) cacheBytes -= old.body.length;
   cache.delete(key);
+}
+
+function remember(key: string, entry: CacheEntry): void {
+  forget(key);
   cache.set(key, entry);
-  while (cache.size > MAX_CACHE_ENTRIES) {
+  cacheBytes += entry.body.length;
+  while (cache.size > MAX_CACHE_ENTRIES || cacheBytes > MAX_CACHE_BYTES) {
     const oldest = cache.keys().next();
-    if (oldest.done) break;
-    cache.delete(oldest.value);
+    if (oldest.done || oldest.value === key) break;
+    forget(oldest.value);
   }
 }
 
 function fresh(entry: CacheEntry | undefined): boolean {
-  return !!entry && Date.now() - entry.storedAt < CACHE_TTL_MS;
+  return !!entry && Date.now() - entry.storedAt < entry.ttlMs;
+}
+
+function usableStale(entry: CacheEntry | undefined): entry is CacheEntry {
+  return !!entry && Date.now() - entry.storedAt < Math.max(MIN_STALE_TTL_MS, entry.ttlMs * 2);
 }
 
 function serveCached(entry: CacheEntry, age: 'fresh' | 'stale'): NextResponse {
@@ -72,30 +94,17 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const segments = (await params).path ?? [];
-  if (segments.length !== 1 || !ALLOWED_LAYERS.has(segments[0])) {
-    return NextResponse.json(
-      { error: 'not_found', message: `Unknown civic layer: ${segments.join('/')}` },
-      { status: 404 },
-    );
+  const resolved = resolveCivicProxyRequest(segments, req.nextUrl.searchParams);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.error, message: resolved.message }, { status: resolved.status });
   }
-  const layer = segments[0];
+  const route = resolved.route;
 
-  const search = new URLSearchParams();
-  for (const [key, value] of req.nextUrl.searchParams.entries()) {
-    if (QUERY_KEYS.has(key) && value.length <= 32) search.set(key, value);
-  }
-  if (!search.has('lat') && !search.has('lng') && !search.has('state') && !search.has('county')) {
-    return NextResponse.json(
-      { error: 'area_required', message: 'Give lat/lng or a state/county.' },
-      { status: 422 },
-    );
-  }
-
-  const upstreamUrl = `${civicApiBase()}/layers/${layer}?${search.toString()}`;
+  const upstreamUrl = `${civicApiBase()}${route.upstreamPath}${route.query ? `?${route.query}` : ''}`;
   const cached = cache.get(upstreamUrl);
   if (fresh(cached)) return serveCached(cached as CacheEntry, 'fresh');
 
-  if (Date.now() < upstreamBlockedUntil) {
+  if (Date.now() < (upstreamBlockedUntil.get(route.kind) ?? 0)) {
     if (cached) return serveCached(cached, 'stale');
     return NextResponse.json(
       { error: 'upstream_cooling_down', message: 'Civic API recently refused; retrying shortly.' },
@@ -104,7 +113,7 @@ export async function GET(
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), route.timeoutMs);
   try {
     const res = await fetch(upstreamUrl, {
       headers: { Accept: 'application/json', 'User-Agent': 'AitherShadowBroker/1.0' },
@@ -115,17 +124,20 @@ export async function GET(
     const contentType = res.headers.get('content-type') || 'application/json';
     if (!res.ok) {
       if (res.status === 429 || res.status === 503) {
-        upstreamBlockedUntil = Date.now() + UPSTREAM_COOLDOWN_MS;
+        upstreamBlockedUntil.set(route.kind, Date.now() + UPSTREAM_COOLDOWN_MS);
       }
-      if (cached && Date.now() - cached.storedAt < STALE_TTL_MS) {
+      if (usableStale(cached)) {
         return serveCached(cached, 'stale');
       }
+      // 404/422/429/503 carry meaning the panel shows ("not loaded on this host
+      // yet", "unknown state"); any other failure is the upstream's, so 502.
+      const passThrough = [404, 422, 429, 503].includes(res.status);
       return new NextResponse(body, {
-        status: res.status === 429 ? 429 : 502,
+        status: passThrough ? res.status : 502,
         headers: { 'Content-Type': contentType, 'Cache-Control': 'no-store' },
       });
     }
-    remember(upstreamUrl, { body, contentType, storedAt: Date.now() });
+    remember(upstreamUrl, { body, contentType, storedAt: Date.now(), ttlMs: route.ttlMs });
     return new NextResponse(body, {
       status: 200,
       headers: {

@@ -215,7 +215,15 @@
     "derivedOsintSource": "实验功能 · 默认关闭",
     "civicAlpr": "车牌识别摄像头 (ALPR)",
     "civicDatacenters": "数据中心（公共缓存）",
-    "civicProjects": "联邦建设项目"
+    "civicProjects": "联邦建设项目",
+    "civic": "公民与选举",
+    "civicRepresentatives": "此地的民选代表（点击地图）",
+    "civicCongressional": "国会选区",
+    "civicStateSenate": "州参议院选区",
+    "civicStateHouse": "州众议院选区",
+    "civicSchoolDistricts": "学区",
+    "civicCounties": "县",
+    "civicPlaces": "城市与城镇"
   },
   "gtLean": {
     "title": "在低配节点上启用衍生 OSINT？",

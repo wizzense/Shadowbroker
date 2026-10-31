@@ -1310,6 +1310,14 @@ export interface ActiveLayers {
   civic_alpr: boolean;
   civic_datacenters: boolean;
   civic_projects: boolean;
+  // Civic Atlas: elections, officials, district lines (/api/civic-proxy lookup + geojson)
+  civic_representatives: boolean;
+  civic_congressional: boolean;
+  civic_state_senate: boolean;
+  civic_state_house: boolean;
+  civic_school_districts: boolean;
+  civic_counties: boolean;
+  civic_places: boolean;
 }
 
 export interface SelectedEntity {

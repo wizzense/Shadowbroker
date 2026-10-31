@@ -215,7 +215,15 @@
     "derivedOsintSource": "Experimental · off by default",
     "civicAlpr": "License-plate readers (ALPR)",
     "civicDatacenters": "Data centers (civic cache)",
-    "civicProjects": "Federal construction projects"
+    "civicProjects": "Federal construction projects",
+    "civic": "Civic & Elections",
+    "civicRepresentatives": "Who represents here (click map)",
+    "civicCongressional": "Congressional districts",
+    "civicStateSenate": "State senate districts",
+    "civicStateHouse": "State house districts",
+    "civicSchoolDistricts": "School districts",
+    "civicCounties": "Counties",
+    "civicPlaces": "Cities & towns"
   },
   "gtLean": {
     "title": "Enable Derived OSINT on a lean node?",
