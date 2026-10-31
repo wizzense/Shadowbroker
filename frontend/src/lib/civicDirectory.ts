@@ -104,7 +104,15 @@ export function resolveCivicProxyRequest(segments: string[], params: URLSearchPa
     }
     return {
       ok: true,
-      route: { kind: 'layer', upstreamPath: `/layers/${head}`, query: search.toString(), ttlMs: 15 * MINUTE, timeoutMs: 20000 },
+      route: {
+        kind: 'layer',
+        upstreamPath: `/layers/${head}`,
+        query: search.toString(),
+        ttlMs: 15 * MINUTE,
+        // A cold state-wide projects answer is a USAspending query upstream
+        // (measured >20 s for IN; Genesis allows 45 s).
+        timeoutMs: head === 'projects' ? 50000 : 20000,
+      },
     };
   }
 
@@ -493,6 +501,36 @@ export function statesForPoint(lat: number, lng: number): string[] {
     if (lng >= w && lng <= e && lat >= s && lat <= n) hits.push([st, (e - w) * (n - s)]);
   }
   return hits.sort((a, b) => a[1] - b[1]).map(([st]) => st);
+}
+
+/** Centre of a state's envelope (a map anchor, not a centroid). */
+export function stateCenter(st: string): { lat: number; lng: number } | null {
+  const b = STATE_BBOX[st];
+  return b ? { lat: (b[1] + b[3]) / 2, lng: (b[0] + b[2]) / 2 } : null;
+}
+
+/**
+ * States whose envelope intersects the view, nearest to the view centre
+ * first (distance from the centre to the envelope: 0 when it contains it,
+ * ties broken by distance to the envelope's centre).
+ */
+export function statesIntersectingBounds(bounds: { south: number; west: number; north: number; east: number }): string[] {
+  const { south, west, north, east } = bounds;
+  if (![south, west, north, east].every(Number.isFinite)) return [];
+  const wraps = east < west;
+  const cLat = (south + north) / 2;
+  const cLng = wraps ? (((west + (east + 360 - west) / 2) + 540) % 360) - 180 : (west + east) / 2;
+  const cos = Math.cos((cLat * Math.PI) / 180);
+  const lngOverlaps = (w: number, e: number) => (wraps ? e >= west || w <= east : e >= west && w <= east);
+  const hits: Array<[string, number, number]> = [];
+  for (const [st, [w, s, e, n]] of Object.entries(STATE_BBOX)) {
+    if (n < south || s > north || !lngOverlaps(w, e)) continue;
+    const dLat = Math.max(s - cLat, 0, cLat - n);
+    const dLng = Math.max(w - cLng, 0, cLng - e) * cos;
+    const toCentre = Math.hypot((s + n) / 2 - cLat, ((w + e) / 2 - cLng) * cos);
+    hits.push([st, Math.hypot(dLat, dLng), toCentre]);
+  }
+  return hits.sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(([st]) => st);
 }
 
 // ─── Boundary layers ────────────────────────────────────────────────────────

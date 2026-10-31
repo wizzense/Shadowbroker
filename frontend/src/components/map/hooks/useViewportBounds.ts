@@ -8,12 +8,36 @@ import {
   normalizeViewBounds,
   type ViewBounds,
 } from '@/lib/viewportPrivacy';
-import { setLiveDataBounds } from '@/lib/liveDataViewport';
+import {
+  getVisibleViewBounds,
+  setLiveDataBounds,
+  setVisibleViewBounds,
+  visibleViewChanged,
+} from '@/lib/liveDataViewport';
 
 const VIEWPORT_POST_DEBOUNCE_MS = 2500;
 const VIEWPORT_POST_MIN_INTERVAL_MS = 12000;
 const VIEWPORT_CHANGE_EPSILON = 1.5;
 export const VIEWPORT_COMMITTED_EVENT = 'shadowbroker:viewport-committed';
+/**
+ * The VISIBLE view moved or zoomed meaningfully (see visibleViewChanged), or a
+ * fly-to destination was announced. Separate from VIEWPORT_COMMITTED_EVENT on
+ * purpose: that one drives live-data refetches keyed on the preload window,
+ * and a zoom must not multiply those.
+ */
+export const VISIBLE_VIEW_EVENT = 'shadowbroker:visible-view';
+
+/**
+ * Announce a camera destination before the camera gets there (search box,
+ * agent fly-to). Area-scoped feeds re-read the visible bounds on this event,
+ * so they follow a fly-to even when the renderer never delivers `moveend`
+ * (headless, background tab). The real bounds replace the estimate on the
+ * next idle/moveend.
+ */
+export function announceViewTarget(bounds: { south: number; west: number; north: number; east: number }): void {
+  setVisibleViewBounds(bounds);
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(VISIBLE_VIEW_EVENT));
+}
 
 function boundsChanged(a: ViewBounds | null, b: ViewBounds): boolean {
   if (!a) return true;
@@ -66,10 +90,12 @@ export function useViewportBounds(
       viewBoundsRef.current = preloadBounds;
     }
 
-    if (boundsChanged(lastCommittedBoundsRef.current, preloadBounds)) {
-      lastCommittedBoundsRef.current = preloadBounds;
-      window.dispatchEvent(new CustomEvent(VIEWPORT_COMMITTED_EVENT));
-    }
+    // Stores first, event second: a listener that reads synchronously must see
+    // the bounds this event is about.
+    const previousVisible = getVisibleViewBounds();
+    setVisibleViewBounds(normalized);
+    const preloadMoved = boundsChanged(lastCommittedBoundsRef.current, preloadBounds);
+    if (preloadMoved) lastCommittedBoundsRef.current = preloadBounds;
 
     // Issue #288: hand the same coarsened/expanded bounds to the live-data
     // poller so heavy collections in /api/live-data/{fast,slow} can be
@@ -81,6 +107,10 @@ export function useViewportBounds(
       north: preloadBounds.north,
       east: preloadBounds.east,
     });
+    if (preloadMoved) window.dispatchEvent(new CustomEvent(VIEWPORT_COMMITTED_EVENT));
+    if (visibleViewChanged(previousVisible, normalized)) {
+      window.dispatchEvent(new CustomEvent(VISIBLE_VIEW_EVENT));
+    }
 
     // Debounce POSTing viewport bounds to backend for dynamic AIS stream filtering
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);

@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, Landmark, LocateFixed, Minus, Plus, RefreshCw } from 'lucide-react';
-import { getLiveDataBounds } from '@/lib/liveDataViewport';
+import { getVisibleViewBounds } from '@/lib/liveDataViewport';
 import {
   CIVIC_LOOKUP_EVENT,
   civicElectionsUrl,
@@ -198,7 +198,7 @@ export default function CivicPanel({ layerEnabled = false }: Props) {
   }, [run]);
 
   const lookupCenter = useCallback(() => {
-    const b = getLiveDataBounds();
+    const b = getVisibleViewBounds();
     if (!b) {
       setError('The map has not reported a view yet.');
       setIsMinimized(false);
