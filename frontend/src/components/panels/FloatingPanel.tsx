@@ -3,9 +3,14 @@
 /**
  * FloatingPanel — the shell every HUD panel lives in.
  *
- * Docked: rendered (via portal) into its dock column in `order`; the bottom
- * edge resizes its height. Floating: absolute inside the floating layer;
- * drag by the title bar, resize from any edge or corner, click to raise.
+ * Docked: rendered (via portal) into its dock column in `order`. Each docked
+ * panel is height-bounded (content scrolls inside it, never under the next
+ * panel) and has a visible splitter bar below it to set its height.
+ * Floating: absolute inside the floating layer; drag by the title bar (snaps
+ * to viewport edges and other panels within 12 px), resize from any edge or
+ * the corner grip, double-click the title to maximize/restore. A panel that
+ * is floated for the first time lands in free map space (never over a dock)
+ * and sizes to its content up to 85% of the viewport height.
  * Popped out: rendered into a separate browser window.
  *
  * The panel body is portalled into ONE persistent DOM node that is physically
@@ -16,16 +21,34 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ExternalLink, GripVertical, Minus, Move, PanelLeft, PanelRight, Plus, X } from 'lucide-react';
 import {
+  ExternalLink,
+  GripVertical,
+  Maximize2,
+  Minimize2,
+  Minus,
+  Move,
+  PanelLeft,
+  PanelRight,
+  Plus,
+  X,
+} from 'lucide-react';
+import {
+  HEADER_HEIGHT,
+  MAX_AUTO_HEIGHT_FRACTION,
   bringToFront,
   clampRect,
   definePanel,
   dockPanel,
-  floatPanel,
+  maximizePanel,
+  overlapsAny,
   patchPanel,
+  placeNewFloat,
   resizeRect,
   resolvePanelState,
+  restorePanel,
+  snapMove,
+  snapResize,
   topZ,
   type DockSide,
   type PanelDefinition,
@@ -46,7 +69,7 @@ export interface FloatingPanelProps {
   defaultDock?: DockSide | null;
   /** Position inside the dock column (ascending, top to bottom). Default 100. */
   order?: number;
-  /** Floating rect used when undocked without a remembered one. */
+  /** Floating rect used when the panel STARTS floating (defaultDock null). */
   defaultRect?: (vp: Viewport) => Rect;
   minWidth?: number;
   minHeight?: number;
@@ -59,21 +82,24 @@ export interface FloatingPanelProps {
 
 const DRAG_THRESHOLD = 4;
 const FLOAT_Z_BASE = 10;
+const SPLITTER_H = 6;
 
 type Gesture =
-  | { kind: 'move'; sx: number; sy: number; start: Rect; armed: boolean }
-  | { kind: 'resize'; sx: number; sy: number; start: Rect; dir: ResizeDir }
+  | { kind: 'move'; sx: number; sy: number; start: Rect; armed: boolean; others: Rect[] }
+  | { kind: 'resize'; sx: number; sy: number; start: Rect; dir: ResizeDir; others: Rect[] }
   | { kind: 'dock-resize'; sy: number; startH: number; maxH: number };
 
-const RESIZE_HANDLES: { dir: ResizeDir; className: string; cursor: string }[] = [
-  { dir: 'n', className: 'top-0 left-2 right-2 h-1.5 -translate-y-1/2', cursor: 'ns-resize' },
-  { dir: 's', className: 'bottom-0 left-2 right-2 h-1.5 translate-y-1/2', cursor: 'ns-resize' },
-  { dir: 'e', className: 'right-0 top-2 bottom-2 w-1.5 translate-x-1/2', cursor: 'ew-resize' },
-  { dir: 'w', className: 'left-0 top-2 bottom-2 w-1.5 -translate-x-1/2', cursor: 'ew-resize' },
-  { dir: 'ne', className: 'top-0 right-0 w-3 h-3 -translate-y-1/2 translate-x-1/2', cursor: 'nesw-resize' },
-  { dir: 'nw', className: 'top-0 left-0 w-3 h-3 -translate-y-1/2 -translate-x-1/2', cursor: 'nwse-resize' },
-  { dir: 'se', className: 'bottom-0 right-0 w-3.5 h-3.5', cursor: 'nwse-resize' },
-  { dir: 'sw', className: 'bottom-0 left-0 w-3 h-3 translate-y-1/2 -translate-x-1/2', cursor: 'nesw-resize' },
+const EDGE = 8; // px hit area of edge handles
+const RESIZE_HANDLES: { dir: ResizeDir; style: React.CSSProperties; cursor: string }[] = [
+  { dir: 'n', style: { top: -EDGE / 2, left: EDGE, right: EDGE, height: EDGE }, cursor: 'ns-resize' },
+  { dir: 's', style: { bottom: -EDGE / 2, left: EDGE, right: 18, height: EDGE }, cursor: 'ns-resize' },
+  { dir: 'e', style: { right: -EDGE / 2, top: EDGE, bottom: 18, width: EDGE }, cursor: 'ew-resize' },
+  { dir: 'w', style: { left: -EDGE / 2, top: EDGE, bottom: EDGE, width: EDGE }, cursor: 'ew-resize' },
+  { dir: 'ne', style: { top: -EDGE / 2, right: -EDGE / 2, width: EDGE * 1.5, height: EDGE * 1.5 }, cursor: 'nesw-resize' },
+  { dir: 'nw', style: { top: -EDGE / 2, left: -EDGE / 2, width: EDGE * 1.5, height: EDGE * 1.5 }, cursor: 'nwse-resize' },
+  { dir: 'sw', style: { bottom: -EDGE / 2, left: -EDGE / 2, width: EDGE * 1.5, height: EDGE * 1.5 }, cursor: 'nesw-resize' },
+  // Corner grip: large, visible (see CornerGrip), sits inside the panel.
+  { dir: 'se', style: { bottom: 0, right: 0, width: 18, height: 18 }, cursor: 'nwse-resize' },
 ];
 
 function HeaderButton({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
@@ -93,8 +119,23 @@ function HeaderButton({ title, onClick, children }: { title: string; onClick: ()
   );
 }
 
+/** Visible diagonal grip in the bottom-right corner of a floating panel. */
+function CornerGrip() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" className="absolute bottom-[2px] right-[2px] pointer-events-none text-cyan-500/70" aria-hidden>
+      <path d="M13 5 L5 13 M13 9 L9 13 M13 1 L1 13" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
 function isInteractive(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('button, input, select, textarea, a') !== null;
+}
+
+function domRect(el: Element | null | undefined): Rect | null {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
 }
 
 export default function FloatingPanel({
@@ -110,7 +151,7 @@ export default function FloatingPanel({
   children,
 }: FloatingPanelProps) {
   const ws = usePanelWorkspace();
-  const { register, update, viewport } = ws;
+  const { register, update, viewport, measureFreeArea, measureObstacles } = ws;
 
   // defaultRect is usually an inline arrow; keep the definition stable anyway.
   const defaultRectRef = useRef(defaultRect);
@@ -155,6 +196,12 @@ export default function FloatingPanel({
 
   const raise = useCallback(() => update((l) => bringToFront(l, id)), [update, id]);
 
+  /** The rect a floating panel actually occupies on screen (auto-height aware). */
+  const currentFloatRect = useCallback((): Rect => {
+    const r = domRect(rootRef.current);
+    return r && state.mode === 'floating' ? r : floatingRect;
+  }, [floatingRect, state.mode]);
+
   // ── actions ──────────────────────────────────────────────────────────────
   const toggleMinimized = useCallback(
     () => update((l) => patchPanel(l, id, { minimized: !resolvePanelState(l, def).minimized })),
@@ -162,13 +209,58 @@ export default function FloatingPanel({
   );
   const close = useCallback(() => update((l) => patchPanel(l, id, { closed: true, poppedOut: false })), [update, id]);
   const dockBack = useCallback(() => update((l) => dockPanel(l, def)), [update, def]);
+
+  /**
+   * Float a docked panel: into free map space (never over a dock), cascaded
+   * away from other floats; height = content (auto, capped at 85% vh) unless
+   * it is a fill-the-column panel, which keeps its docked height.
+   */
   const undock = useCallback(() => {
-    const box = rootRef.current?.getBoundingClientRect();
-    const rect =
-      state.rect ??
-      (box ? { x: box.left + 24, y: box.top + 24, w: box.width, h: Math.max(box.height, 320) } : def.defaultRect(viewport));
-    update((l) => floatPanel(l, id, clampRect(rect, viewport, def)));
-  }, [update, id, def, state.rect, viewport]);
+    if (state.rect && !overlapsAny(state.rect, measureObstacles(id).docks)) {
+      update((l) => bringToFront(patchPanel(l, id, { mode: 'floating', maximized: false }), id));
+      return;
+    }
+    const box = domRect(rootRef.current);
+    const vp = latest.current.viewport;
+    const capH = Math.round(vp.height * MAX_AUTO_HEIGHT_FRACTION);
+    const content = bodyHost?.scrollHeight ?? 0;
+    const wantH = dockGrow ? (box?.h ?? capH) : content + HEADER_HEIGHT + 2;
+    const size = { w: Math.max(box?.w ?? 380, def.minWidth), h: Math.min(Math.max(wantH, def.minHeight), capH) };
+    const rect = placeNewFloat(size, measureFreeArea(), measureObstacles(id).floats, def);
+    update((l) =>
+      bringToFront(patchPanel(l, id, { mode: 'floating', rect, autoHeight: !dockGrow, maximized: false, minimized: false }), id),
+    );
+  }, [state.rect, update, id, bodyHost, dockGrow, def, measureFreeArea, measureObstacles]);
+
+  // One-time repair of floats saved by the first panel-workspace build, which
+  // undocked panels at the dock's own position (e.g. CIVIC over DATA LAYERS).
+  // Those entries never carried `autoHeight`; every newer code path writes it.
+  const repairedRef = useRef(false);
+  const storedEntry = ws.layout.panels[id];
+  useEffect(() => {
+    if (repairedRef.current || !ws.floatEl || !storedEntry) return;
+    if (storedEntry.mode !== 'floating' || !storedEntry.rect || storedEntry.autoHeight !== undefined) return;
+    if (!ws.dockEls.left && !ws.dockEls.right) return;
+    repairedRef.current = true;
+    const { floats, docks } = measureObstacles(id);
+    if (!overlapsAny(storedEntry.rect, docks)) {
+      update((l) => patchPanel(l, id, { autoHeight: false }));
+      return;
+    }
+    const rect = placeNewFloat(storedEntry.rect, measureFreeArea(), floats, def);
+    update((l) => patchPanel(l, id, { rect, autoHeight: false }));
+  }, [storedEntry, ws.floatEl, ws.dockEls, measureObstacles, measureFreeArea, update, id, def]);
+
+  const toggleMaximize = useCallback(() => {
+    if (state.maximized) {
+      update((l) => restorePanel(l, def));
+      return;
+    }
+    const fromDock = state.mode === 'docked';
+    const current = fromDock ? (domRect(rootRef.current) ?? floatingRect) : currentFloatRect();
+    update((l) => maximizePanel(l, id, measureFreeArea(), current, fromDock));
+  }, [state.maximized, state.mode, update, def, id, floatingRect, currentFloatRect, measureFreeArea]);
+
   const popOut = useCallback(() => {
     const box = rootRef.current?.getBoundingClientRect();
     const ok = openPanelPopout(id, { w: Math.max(box?.width ?? 420, 380), h: Math.max(box?.height ?? 600, 520) });
@@ -178,7 +270,7 @@ export default function FloatingPanel({
 
   // ── pointer gestures (mouse, pen, touch) on window listeners ─────────────
   const runGesture = useCallback(
-    (g: Gesture, pointerId: number) => {
+    (g: Gesture, pointerId: number, wasDocked: boolean) => {
       let rect: Rect | null = null;
       let dockH: number | null = null;
       const onMove = (ev: PointerEvent) => {
@@ -191,10 +283,11 @@ export default function FloatingPanel({
             if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
             g.armed = true;
           }
-          rect = clampRect({ ...g.start, x: g.start.x + dx, y: g.start.y + dy }, vp, d);
+          rect = snapMove(clampRect({ ...g.start, x: g.start.x + dx, y: g.start.y + dy }, vp, d), vp, g.others);
           setLiveRect(rect);
         } else if (g.kind === 'resize') {
-          rect = resizeRect(g.start, g.dir, ev.clientX - g.sx, ev.clientY - g.sy, vp, d);
+          const raw = resizeRect(g.start, g.dir, ev.clientX - g.sx, ev.clientY - g.sy, vp, d);
+          rect = snapResize(raw, g.dir, vp, g.others, d);
           setLiveRect(rect);
         } else {
           dockH = Math.round(Math.min(Math.max(g.startH + (ev.clientY - g.sy), d.minHeight), g.maxH));
@@ -215,10 +308,12 @@ export default function FloatingPanel({
           return;
         }
         setLiveRect(null);
-        if (rect) {
-          const r = rect;
-          update((l) => floatPanel(l, id, r));
-        }
+        if (!rect) return; // a click, not a drag
+        const r = rect;
+        const patch: Parameters<typeof patchPanel>[2] = { mode: 'floating', rect: r, maximized: false, restoreRect: null };
+        if (g.kind === 'resize' && /[ns]/.test(g.dir)) patch.autoHeight = false;
+        if (g.kind === 'move' && wasDocked) patch.autoHeight = false;
+        update((l) => bringToFront(patchPanel(l, id, patch), id));
       };
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onEnd);
@@ -227,23 +322,32 @@ export default function FloatingPanel({
     [update, id],
   );
 
+  const snapTargets = useCallback(() => {
+    const { floats, docks } = measureObstacles(id);
+    return [...floats, ...docks];
+  }, [measureObstacles, id]);
+
   const beginMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || isInteractive(e.target)) return;
-    const box = rootRef.current?.getBoundingClientRect();
+    const box = domRect(rootRef.current);
     if (!box) return;
     e.preventDefault();
     const docked = state.mode === 'docked';
     const start: Rect = docked
-      ? { x: box.left, y: box.top, w: box.width, h: Math.max(Math.min(box.height, viewport.height * 0.8), 240) }
-      : floatingRect;
-    runGesture({ kind: 'move', sx: e.clientX, sy: e.clientY, start, armed: false }, e.pointerId);
+      ? { ...box, h: Math.max(Math.min(box.h, viewport.height * MAX_AUTO_HEIGHT_FRACTION), 240) }
+      : currentFloatRect();
+    runGesture({ kind: 'move', sx: e.clientX, sy: e.clientY, start, armed: false, others: snapTargets() }, e.pointerId, docked);
   };
 
   const beginResize = (dir: ResizeDir) => (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    runGesture({ kind: 'resize', sx: e.clientX, sy: e.clientY, start: floatingRect, dir }, e.pointerId);
+    runGesture(
+      { kind: 'resize', sx: e.clientX, sy: e.clientY, start: currentFloatRect(), dir, others: snapTargets() },
+      e.pointerId,
+      false,
+    );
   };
 
   const beginDockResize = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -254,7 +358,7 @@ export default function FloatingPanel({
     if (!box) return;
     const dockEl = ws.dockEls[state.dock];
     const maxH = dockEl ? dockEl.getBoundingClientRect().height : viewport.height;
-    runGesture({ kind: 'dock-resize', sy: e.clientY, startH: box.height, maxH }, e.pointerId);
+    runGesture({ kind: 'dock-resize', sy: e.clientY, startH: box.height, maxH }, e.pointerId, true);
   };
 
   if (state.closed || !bodyHost) return null;
@@ -270,8 +374,9 @@ export default function FloatingPanel({
       style={{ touchAction: 'none' }}
       onPointerDown={beginMove}
       onDoubleClick={(e) => {
-        if (!isInteractive(e.target) && !state.poppedOut) toggleMinimized();
+        if (!isInteractive(e.target) && !state.poppedOut) toggleMaximize();
       }}
+      title="Drag to move · double-click to maximize/restore"
       data-panel-header={id}
     >
       <GripVertical size={11} className="text-cyan-800 shrink-0" />
@@ -287,6 +392,9 @@ export default function FloatingPanel({
         <>
           <HeaderButton title={minimized ? 'Expand panel' : 'Collapse panel'} onClick={toggleMinimized}>
             {minimized ? <Plus size={11} /> : <Minus size={11} />}
+          </HeaderButton>
+          <HeaderButton title={state.maximized ? 'Restore size' : 'Maximize'} onClick={toggleMaximize}>
+            {state.maximized ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
           </HeaderButton>
           {state.mode === 'floating' ? (
             <HeaderButton title="Dock back to default slot" onClick={dockBack}>
@@ -326,17 +434,21 @@ export default function FloatingPanel({
     const target = ws.floatEl;
     if (target) {
       const r = liveRect ?? floatingRect;
+      const auto = state.autoHeight && !state.maximized && !liveRect;
+      const capH = Math.min(Math.round(viewport.height * MAX_AUTO_HEIGHT_FRACTION), viewport.height - r.y);
       shell = createPortal(
         <div
           ref={rootRef}
           data-panel-id={id}
           data-panel-mode="floating"
-          className="absolute pointer-events-auto flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.6)]"
+          data-maximized={state.maximized ? 'true' : undefined}
+          className="absolute pointer-events-auto flex flex-col overflow-visible bg-[#03080c]/40 shadow-[0_8px_32px_rgba(0,0,0,0.6)] outline outline-1 outline-cyan-900/40"
           style={{
             left: r.x,
             top: r.y,
             width: r.w,
-            height: hideBody ? undefined : r.h,
+            height: hideBody || auto ? undefined : r.h,
+            maxHeight: hideBody ? undefined : auto ? capH : undefined,
             zIndex: FLOAT_Z_BASE + state.z + (liveRect ? 1000 : 0),
             direction: 'ltr',
           }}
@@ -348,16 +460,20 @@ export default function FloatingPanel({
           {inlineSlot}
           {parkedSlot}
           {popout}
-          {!hideBody &&
-            RESIZE_HANDLES.map((h) => (
-              <div
-                key={h.dir}
-                className={`absolute ${h.className} z-10`}
-                style={{ cursor: h.cursor, touchAction: 'none' }}
-                onPointerDown={beginResize(h.dir)}
-                data-resize={h.dir}
-              />
-            ))}
+          {!hideBody && (
+            <>
+              {RESIZE_HANDLES.map((h) => (
+                <div
+                  key={h.dir}
+                  className="absolute z-10"
+                  style={{ ...h.style, cursor: h.cursor, touchAction: 'none' }}
+                  onPointerDown={beginResize(h.dir)}
+                  data-resize={h.dir}
+                />
+              ))}
+              <CornerGrip />
+            </>
+          )}
         </div>,
         target,
       );
@@ -367,13 +483,22 @@ export default function FloatingPanel({
     if (target) {
       const fixedH = liveDockH ?? state.dockHeight;
       const grows = dockGrow && fixedH === null && !hideBody;
+      const heightStyle: React.CSSProperties = hideBody
+        ? { flex: '0 0 auto' }
+        : fixedH !== null
+          ? { flex: `0 0 ${fixedH}px`, height: fixedH }
+          : grows
+            ? { flex: '1 1 0px', minHeight: Math.max(def.minHeight, 300) }
+            : // natural height, bounded (overflow hidden + inner scroll) so it can
+              // never spill under the next panel
+              { flex: '0 0 auto', maxHeight: '100%' };
       shell = createPortal(
         <div
           ref={rootRef}
           data-panel-id={id}
           data-panel-mode="docked"
-          className={`relative pointer-events-auto flex flex-col ${grows ? 'flex-1 min-h-[300px]' : 'flex-shrink-0'}`}
-          style={{ order, height: fixedH !== null && !hideBody ? fixedH : undefined, direction: 'ltr' }}
+          className="relative pointer-events-auto flex flex-col overflow-hidden"
+          style={{ order, direction: 'ltr', ...heightStyle }}
         >
           {header}
           {inlineSlot}
@@ -381,14 +506,17 @@ export default function FloatingPanel({
           {popout}
           {!hideBody && (
             <div
-              className="absolute left-0 right-0 bottom-0 h-2 translate-y-1/2 cursor-ns-resize z-10 group"
-              style={{ touchAction: 'none' }}
-              title="Drag to resize; double-click for natural height"
+              className="shrink-0 flex items-center justify-center cursor-row-resize bg-[#03080c]/90 border border-t-0 border-cyan-900/50 hover:bg-cyan-950/70 group"
+              style={{ height: SPLITTER_H, touchAction: 'none' }}
+              title="Drag to resize this panel · double-click for automatic height"
               onPointerDown={beginDockResize}
               onDoubleClick={() => update((l) => patchPanel(l, id, { dockHeight: null }))}
               data-resize="dock-s"
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={`Resize ${title}`}
             >
-              <div className="mx-auto mt-[3px] h-[2px] w-10 bg-transparent group-hover:bg-cyan-500/70 transition-colors" />
+              <div className="h-[2px] w-8 bg-cyan-800/70 group-hover:bg-cyan-400 transition-colors" />
             </div>
           )}
         </div>,

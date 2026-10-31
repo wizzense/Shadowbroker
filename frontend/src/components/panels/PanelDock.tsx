@@ -113,7 +113,7 @@ export function PanelFloatLayer({ className = '' }: { className?: string }) {
 
 /** PANELS menu: reopen/raise any registered panel, presets, reset. */
 export function PanelsMenu({ className = '' }: { className?: string }) {
-  const { definitions, layout, update, applyPreset, resetLayout } = usePanelWorkspace();
+  const { definitions, layout, update, applyPreset, resetLayout, arrangeFloats } = usePanelWorkspace();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -134,6 +134,10 @@ export function PanelsMenu({ className = '' }: { className?: string }) {
   }, [open]);
 
   const closedCount = definitions.filter((d) => resolvePanelState(layout, d).closed).length;
+  const floatingCount = definitions.filter((d) => {
+    const s = resolvePanelState(layout, d);
+    return s.mode === 'floating' && !s.closed && !s.poppedOut;
+  }).length;
 
   return (
     <div ref={rootRef} className={`relative pointer-events-auto hud-zone ${className}`}>
@@ -181,6 +185,29 @@ export function PanelsMenu({ className = '' }: { className?: string }) {
               </button>
             );
           })}
+          <div className="mt-1 border-t border-cyan-900/50 px-3 pt-2 pb-1 text-[9px] tracking-[0.25em] text-cyan-700">
+            FLOATING ({floatingCount})
+          </div>
+          {(['tile', 'cascade'] as const).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              role="menuitem"
+              disabled={floatingCount === 0}
+              title={
+                kind === 'tile'
+                  ? 'Arrange floating panels in a grid over the free map area'
+                  : 'Stack floating panels diagonally over the free map area'
+              }
+              onClick={() => {
+                arrangeFloats(kind);
+                setOpen(false);
+              }}
+              className="w-full px-3 py-1.5 text-left text-cyan-400 tracking-wider hover:bg-cyan-950/50 transition-colors disabled:text-gray-600 disabled:hover:bg-transparent"
+            >
+              {kind === 'tile' ? 'TILE' : 'CASCADE'}
+            </button>
+          ))}
           <div className="mt-1 border-t border-cyan-900/50 px-3 pt-2 pb-1 text-[9px] tracking-[0.25em] text-cyan-700">LAYOUT</div>
           {PANEL_PRESETS.map((p) => (
             <button

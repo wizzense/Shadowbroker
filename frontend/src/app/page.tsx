@@ -646,9 +646,12 @@ function DashboardInner() {
 
             {/* PANEL WORKSPACE — floating layer + PANELS menu. Every HUD panel
                 below is a <FloatingPanel>: docked into a column by default,
-                draggable/resizable/collapsible/pop-out, layout persisted. */}
-            <PanelFloatLayer className="z-[205]" />
-            <PanelsMenu className="absolute top-2 left-1/2 -translate-x-1/2 z-[206]" />
+                draggable/resizable/collapsible/pop-out, layout persisted.
+                z-order: map (z-0, isolated, incl. its popups) < docks (200) <
+                HUD popups (EntityGraph 250) < ticker (8000) < FLOATS (8500) <
+                PANELS menu (8600) < offline banner (9000) < modals (9998+). */}
+            <PanelFloatLayer className="z-[8500]" />
+            <PanelsMenu className="absolute top-2 left-1/2 -translate-x-1/2 z-[8600]" />
 
             {/* LEFT DOCK — scrollbar on LEFT edge */}
             <PanelDock side="left" open={leftOpen} className="left-6 top-24 bottom-9 z-[201]" />
