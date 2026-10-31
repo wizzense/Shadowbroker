@@ -8,6 +8,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+/**
+ * The operator's OWN local model daemons the agent chat may call from the
+ * browser (components/AgentChatPanel): awdk :9001, awnode :8090, GobboNet :11434.
+ * Each daemon gates Origin and auth itself; this only lets the page ask.
+ * The backend loopback ports (8000/8787) stay dev-only.
+ */
+const AGENT_LOOPBACK_ORIGINS = 'http://127.0.0.1:9001 http://127.0.0.1:8090 http://127.0.0.1:11434';
+
 function buildCsp(nonce: string, strictScripts = false): string {
   const isDev = process.env.NODE_ENV !== 'production';
   const scriptSrc = isDev
@@ -21,8 +29,8 @@ function buildCsp(nonce: string, strictScripts = false): string {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     isDev
-      ? "connect-src 'self' ws: wss: http://127.0.0.1:8000 http://127.0.0.1:8787 https:"
-      : "connect-src 'self' ws: wss: https:",
+      ? `connect-src 'self' ws: wss: http://127.0.0.1:8000 http://127.0.0.1:8787 ${AGENT_LOOPBACK_ORIGINS} https:`
+      : `connect-src 'self' ws: wss: ${AGENT_LOOPBACK_ORIGINS} https:`,
     "font-src 'self' data:",
     "object-src 'none'",
     "worker-src 'self' blob:",
@@ -55,6 +63,7 @@ function isPrivilegedApiPath(pathname: string): boolean {
     path.startsWith('/api/wormhole/') ||
     path === '/api/settings' ||
     path.startsWith('/api/settings/') ||
+    path.startsWith('/api/agent-llm/') ||
     path.startsWith('/api/ai/') ||
     path === '/api/ai' ||
     path.startsWith('/api/tools/') ||

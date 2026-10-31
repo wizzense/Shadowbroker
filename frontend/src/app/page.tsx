@@ -26,6 +26,7 @@ import CivicPanel from '@/components/CivicPanel';
 import EntityGraphPanel from '@/components/EntityGraphPanel';
 import { isEntityGraphEligible } from '@/lib/entityGraph';
 import AIIntelPanel from '@/components/AIIntelPanel';
+import AgentChatPanel from '@/components/AgentChatPanel';
 import GlobalTicker from '@/components/GlobalTicker';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import OnboardingModal, { useOnboarding } from '@/components/OnboardingModal';
@@ -1163,6 +1164,16 @@ function DashboardInner() {
           </ErrorBoundary>
         </motion.div>
 
+        {/* AGENT CHAT — prompts the board through the WebMCP tool registry */}
+        {secondaryBootReady && (
+          <ErrorBoundary name="AgentChat">
+            <AgentChatPanel
+              onFlyTo={(lat, lng, zoom) => setFlyToLocation({ lat, lng, zoom, ts: Date.now() })}
+              activeLayers={activeLayers}
+              setActiveLayers={setActiveLayers}
+            />
+          </ErrorBoundary>
+        )}
       </main>
     </>
   );
