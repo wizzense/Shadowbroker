@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { motion } from '@/lib/motion';
 import { Search, X, Check, GripHorizontal } from 'lucide-react';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 interface FilterField {
   key: string;
@@ -220,258 +221,260 @@ export default function AdvancedFilterModal({
   const c = colorMap[accentColorName] || colorMap.cyan;
 
   return (
-    <div
-      className="fixed inset-0 z-[9999] pointer-events-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
-
-      {/* Modal */}
+    <ModalPortal>
       <div
-        ref={modalRef}
-        className="absolute"
-        style={{
-          left: position.x,
-          top: position.y,
-          width: 480,
-          userSelect: isDragging ? 'none' : 'auto',
+        className="fixed inset-0 z-[9999] pointer-events-auto"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
         }}
       >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.92 }}
-          transition={{ duration: 0.2 }}
-          className={`bg-[var(--bg-secondary)]/95 backdrop-blur-sm border ${c.border} shadow-[0_8px_60px_rgba(0,0,0,0.3)] flex flex-col font-mono overflow-hidden`}
-          style={{ maxHeight: 'calc(100vh - 80px)' }}
+        {/* Backdrop */}
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+
+        {/* Modal */}
+        <div
+          ref={modalRef}
+          className="absolute"
+          style={{
+            left: position.x,
+            top: position.y,
+            width: 480,
+            userSelect: isDragging ? 'none' : 'auto',
+          }}
         >
-          {/* ── Title Bar (Draggable) ── */}
-          <div
-            className="flex items-center justify-between px-4 py-3 cursor-grab active:cursor-grabbing border-b border-[var(--border-primary)]/60 select-none flex-shrink-0"
-            onMouseDown={handleMouseDown}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.92 }}
+            transition={{ duration: 0.2 }}
+            className={`bg-[var(--bg-secondary)]/95 backdrop-blur-sm border ${c.border} shadow-[0_8px_60px_rgba(0,0,0,0.3)] flex flex-col font-mono overflow-hidden`}
+            style={{ maxHeight: 'calc(100vh - 80px)' }}
           >
-            <div className="flex items-center gap-2.5">
-              <GripHorizontal size={14} className="text-[var(--text-muted)]" />
-              {icon}
-              <span className={`text-[11px] ${c.text} tracking-[0.25em] font-semibold`}>
-                {title}
-              </span>
-              {totalSelected > 0 && (
-                <span className={`text-[9px] ${c.bg} ${c.text} px-1.5 py-0.5 rounded-sm`}>
-                  {totalSelected} SELECTED
-                </span>
-              )}
-            </div>
-            <button
-              onClick={onClose}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 hover:bg-[var(--bg-tertiary)]"
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          {disabledLayers.length > 0 && (
+            {/* ── Title Bar (Draggable) ── */}
             <div
-              role="status"
-              className="px-4 py-2 flex flex-col gap-2 text-[9px] tracking-widest text-amber-400 bg-amber-500/10 border-b border-amber-500/30 flex-shrink-0"
+              className="flex items-center justify-between px-4 py-3 cursor-grab active:cursor-grabbing border-b border-[var(--border-primary)]/60 select-none flex-shrink-0"
+              onMouseDown={handleMouseDown}
             >
-              <span>
-                {disabledLayers.map((l) => l.label.toUpperCase()).join(' + ')} LAYER
-                {disabledLayers.length > 1 ? 'S ARE' : ' IS'} OFF —{' '}
-                {anyLayerEnabled
-                  ? 'THIS FILTER ONLY AFFECTS THE ENABLED LAYERS'
-                  : 'THIS FILTER WILL NOT CHANGE THE MAP UNTIL A LAYER IS ENABLED'}
-              </span>
-              {onEnableLayer && (
-                <span className="flex flex-wrap gap-1.5">
-                  {disabledLayers.map((l) => (
-                    <button
-                      key={l.id}
-                      onClick={() => onEnableLayer(l.id)}
-                      className="border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/30 px-2 py-1 text-amber-300 transition-colors"
-                    >
-                      ENABLE {l.label.toUpperCase()}
-                    </button>
-                  ))}
+              <div className="flex items-center gap-2.5">
+                <GripHorizontal size={14} className="text-[var(--text-muted)]" />
+                {icon}
+                <span className={`text-[11px] ${c.text} tracking-[0.25em] font-semibold`}>
+                  {title}
                 </span>
-              )}
-            </div>
-          )}
-
-          {/* ── Tab Bar (for multi-field categories) ── */}
-          {fields.length > 1 && (
-            <div className="flex border-b border-[var(--border-primary)]/40 px-3 pt-2 gap-1 flex-shrink-0">
-              {fields.map((field) => {
-                const isActive = activeTab === field.key;
-                const count = draft[field.key]?.size || 0;
-                return (
-                  <button
-                    key={field.key}
-                    onClick={() => setActiveTab(field.key)}
-                    className={`px-3 py-1.5 text-[9px] tracking-widest rounded-t transition-colors relative ${
-                      isActive
-                        ? `${c.bg} ${c.text} border border-b-0 ${c.border}`
-                        : 'text-gray-500 hover:text-gray-300 border border-transparent'
-                    }`}
-                  >
-                    {field.label}
-                    {count > 0 && (
-                      <span className={`ml-1.5 text-[11px] ${c.text} bg-black/40 px-1`}>
-                        {count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* ── Selected Chips ── */}
-          {activeField && draft[activeTab]?.size > 0 && (
-            <div className="px-4 pt-3 pb-1 flex flex-wrap gap-1.5 flex-shrink-0 max-h-20 overflow-y-auto styled-scrollbar">
-              {Array.from(draft[activeTab]).map((val) => {
-                const displayVal = activeField.optionLabels?.[val] || val;
-                return (
-                  <span
-                    key={val}
-                    className={`inline-flex items-center gap-1 text-[9px] ${c.bg} ${c.text} border ${c.border} rounded-full px-2 py-0.5 group`}
-                  >
-                    {displayVal.length > 28 ? displayVal.slice(0, 28) + '…' : displayVal}
-                    <button
-                      onClick={() => removeChip(activeTab, val)}
-                      className="opacity-50 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X size={8} />
-                    </button>
+                {totalSelected > 0 && (
+                  <span className={`text-[9px] ${c.bg} ${c.text} px-1.5 py-0.5 rounded-sm`}>
+                    {totalSelected} SELECTED
                   </span>
-                );
-              })}
+                )}
+              </div>
               <button
-                onClick={() => clearField(activeTab)}
-                className="text-[11px] text-red-400/70 hover:text-red-300 tracking-widest ml-1"
+                onClick={onClose}
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 hover:bg-[var(--bg-tertiary)]"
               >
-                CLEAR
+                <X size={14} />
               </button>
             </div>
-          )}
 
-          {/* ── Search Bar ── */}
-          <div className="px-4 pt-3 pb-2 flex-shrink-0">
-            <div className="relative">
-              <Search
-                size={12}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600"
-              />
-              <input
-                type="text"
-                value={searchTerms[activeTab] || ''}
-                onChange={(e) =>
-                  setSearchTerms((prev) => ({ ...prev, [activeTab]: e.target.value }))
-                }
-                placeholder={`Search ${activeField?.label.toLowerCase() || ''}...`}
-                className={`w-full bg-[var(--bg-primary)]/50 border border-[var(--border-primary)]/70 text-[11px] text-[var(--text-secondary)] pl-8 pr-8 py-2 font-mono tracking-wide focus:outline-none focus:${c.border} focus:ring-1 ${c.ring} placeholder-[var(--text-muted)] transition-all`}
-                autoFocus
-              />
-              {searchTerms[activeTab] && (
-                <button
-                  onClick={() => setSearchTerms((prev) => ({ ...prev, [activeTab]: '' }))}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-            <div className="flex justify-between mt-1.5">
-              <span className="text-[11px] text-[var(--text-muted)] tracking-widest">
-                {filteredOptions.length} AVAILABLE
-              </span>
-              <span className="text-[11px] text-[var(--text-muted)] tracking-widest">
-                {draft[activeTab]?.size || 0} SELECTED
-              </span>
-            </div>
-          </div>
-
-          {/* ── Scrollable Checkbox List ── */}
-          <div
-            className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 styled-scrollbar"
-            style={{ maxHeight: '35vh' }}
-          >
-            {filteredOptions.length === 0 ? (
-              <div className="text-center py-8 text-[var(--text-muted)] text-[10px] tracking-widest">
-                {!anyLayerEnabled
-                  ? 'LAYER IS OFF — ENABLE IT ABOVE TO LOAD OPTIONS'
-                  : activeField && activeField.options.length === 0
-                    ? 'WAITING FOR DATA…'
-                    : 'NO MATCHING RESULTS'}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-px">
-                {visibleOptions.map((option) => {
-                  const isChecked = draft[activeTab]?.has(option);
-                  return (
-                    <button
-                      key={option}
-                      onClick={() => toggleItem(activeTab, option)}
-                      className={`flex items-center gap-2.5 px-3 py-1.5 text-left transition-all group ${
-                        isChecked
-                          ? `${c.bg} ${c.text}`
-                          : `text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]/50 hover:text-[var(--text-primary)]`
-                      }`}
-                    >
-                      {/* Checkbox */}
-                      <div
-                        className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center flex-shrink-0 transition-all ${
-                          isChecked
-                            ? `${c.border} ${c.bg}`
-                            : 'border-[var(--border-primary)] group-hover:border-[var(--border-secondary)]'
-                        }`}
+            {disabledLayers.length > 0 && (
+              <div
+                role="status"
+                className="px-4 py-2 flex flex-col gap-2 text-[9px] tracking-widest text-amber-400 bg-amber-500/10 border-b border-amber-500/30 flex-shrink-0"
+              >
+                <span>
+                  {disabledLayers.map((l) => l.label.toUpperCase()).join(' + ')} LAYER
+                  {disabledLayers.length > 1 ? 'S ARE' : ' IS'} OFF —{' '}
+                  {anyLayerEnabled
+                    ? 'THIS FILTER ONLY AFFECTS THE ENABLED LAYERS'
+                    : 'THIS FILTER WILL NOT CHANGE THE MAP UNTIL A LAYER IS ENABLED'}
+                </span>
+                {onEnableLayer && (
+                  <span className="flex flex-wrap gap-1.5">
+                    {disabledLayers.map((l) => (
+                      <button
+                        key={l.id}
+                        onClick={() => onEnableLayer(l.id)}
+                        className="border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/30 px-2 py-1 text-amber-300 transition-colors"
                       >
-                        {isChecked && <Check size={9} strokeWidth={3} />}
-                      </div>
-                      <span className="text-[10px] tracking-wide truncate">
-                        {activeField?.optionLabels?.[option] || option}
-                      </span>
-                    </button>
-                  );
-                })}
-                {hiddenCount > 0 && (
-                  <div className="text-center py-3 text-[var(--text-muted)] text-[10px] tracking-widest">
-                    SHOWING {visibleOptions.length.toLocaleString()} OF{' '}
-                    {filteredOptions.length.toLocaleString()} — SEARCH TO NARROW
-                  </div>
+                        ENABLE {l.label.toUpperCase()}
+                      </button>
+                    ))}
+                  </span>
                 )}
               </div>
             )}
-          </div>
 
-          {/* ── Footer ── */}
-          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-primary)]/60 flex-shrink-0">
-            <button
-              onClick={clearAll}
-              className="text-[9px] text-red-400/70 hover:text-red-300 tracking-widest transition-colors"
-            >
-              CLEAR ALL
-            </button>
-            <div className="flex gap-2">
-              <button
-                onClick={onClose}
-                className="text-[9px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] tracking-widest border border-[var(--border-primary)] px-4 py-1.5 hover:bg-[var(--bg-tertiary)]/50 transition-all"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={handleApply}
-                className={`text-[9px] ${c.text} tracking-widest border ${c.border} px-4 py-1.5 ${c.bg} ${c.bgHover} transition-all font-semibold`}
-              >
-                APPLY{totalSelected > 0 ? ` (${totalSelected})` : ''}
-              </button>
+            {/* ── Tab Bar (for multi-field categories) ── */}
+            {fields.length > 1 && (
+              <div className="flex border-b border-[var(--border-primary)]/40 px-3 pt-2 gap-1 flex-shrink-0">
+                {fields.map((field) => {
+                  const isActive = activeTab === field.key;
+                  const count = draft[field.key]?.size || 0;
+                  return (
+                    <button
+                      key={field.key}
+                      onClick={() => setActiveTab(field.key)}
+                      className={`px-3 py-1.5 text-[9px] tracking-widest rounded-t transition-colors relative ${
+                        isActive
+                          ? `${c.bg} ${c.text} border border-b-0 ${c.border}`
+                          : 'text-gray-500 hover:text-gray-300 border border-transparent'
+                      }`}
+                    >
+                      {field.label}
+                      {count > 0 && (
+                        <span className={`ml-1.5 text-[11px] ${c.text} bg-black/40 px-1`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── Selected Chips ── */}
+            {activeField && draft[activeTab]?.size > 0 && (
+              <div className="px-4 pt-3 pb-1 flex flex-wrap gap-1.5 flex-shrink-0 max-h-20 overflow-y-auto styled-scrollbar">
+                {Array.from(draft[activeTab]).map((val) => {
+                  const displayVal = activeField.optionLabels?.[val] || val;
+                  return (
+                    <span
+                      key={val}
+                      className={`inline-flex items-center gap-1 text-[9px] ${c.bg} ${c.text} border ${c.border} rounded-full px-2 py-0.5 group`}
+                    >
+                      {displayVal.length > 28 ? displayVal.slice(0, 28) + '…' : displayVal}
+                      <button
+                        onClick={() => removeChip(activeTab, val)}
+                        className="opacity-50 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={8} />
+                      </button>
+                    </span>
+                  );
+                })}
+                <button
+                  onClick={() => clearField(activeTab)}
+                  className="text-[11px] text-red-400/70 hover:text-red-300 tracking-widest ml-1"
+                >
+                  CLEAR
+                </button>
+              </div>
+            )}
+
+            {/* ── Search Bar ── */}
+            <div className="px-4 pt-3 pb-2 flex-shrink-0">
+              <div className="relative">
+                <Search
+                  size={12}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600"
+                />
+                <input
+                  type="text"
+                  value={searchTerms[activeTab] || ''}
+                  onChange={(e) =>
+                    setSearchTerms((prev) => ({ ...prev, [activeTab]: e.target.value }))
+                  }
+                  placeholder={`Search ${activeField?.label.toLowerCase() || ''}...`}
+                  className={`w-full bg-[var(--bg-primary)]/50 border border-[var(--border-primary)]/70 text-[11px] text-[var(--text-secondary)] pl-8 pr-8 py-2 font-mono tracking-wide focus:outline-none focus:${c.border} focus:ring-1 ${c.ring} placeholder-[var(--text-muted)] transition-all`}
+                  autoFocus
+                />
+                {searchTerms[activeTab] && (
+                  <button
+                    onClick={() => setSearchTerms((prev) => ({ ...prev, [activeTab]: '' }))}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              <div className="flex justify-between mt-1.5">
+                <span className="text-[11px] text-[var(--text-muted)] tracking-widest">
+                  {filteredOptions.length} AVAILABLE
+                </span>
+                <span className="text-[11px] text-[var(--text-muted)] tracking-widest">
+                  {draft[activeTab]?.size || 0} SELECTED
+                </span>
+              </div>
             </div>
-          </div>
-        </motion.div>
+
+            {/* ── Scrollable Checkbox List ── */}
+            <div
+              className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 styled-scrollbar"
+              style={{ maxHeight: '35vh' }}
+            >
+              {filteredOptions.length === 0 ? (
+                <div className="text-center py-8 text-[var(--text-muted)] text-[10px] tracking-widest">
+                  {!anyLayerEnabled
+                    ? 'LAYER IS OFF — ENABLE IT ABOVE TO LOAD OPTIONS'
+                    : activeField && activeField.options.length === 0
+                      ? 'WAITING FOR DATA…'
+                      : 'NO MATCHING RESULTS'}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-px">
+                  {visibleOptions.map((option) => {
+                    const isChecked = draft[activeTab]?.has(option);
+                    return (
+                      <button
+                        key={option}
+                        onClick={() => toggleItem(activeTab, option)}
+                        className={`flex items-center gap-2.5 px-3 py-1.5 text-left transition-all group ${
+                          isChecked
+                            ? `${c.bg} ${c.text}`
+                            : `text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]/50 hover:text-[var(--text-primary)]`
+                        }`}
+                      >
+                        {/* Checkbox */}
+                        <div
+                          className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center flex-shrink-0 transition-all ${
+                            isChecked
+                              ? `${c.border} ${c.bg}`
+                              : 'border-[var(--border-primary)] group-hover:border-[var(--border-secondary)]'
+                          }`}
+                        >
+                          {isChecked && <Check size={9} strokeWidth={3} />}
+                        </div>
+                        <span className="text-[10px] tracking-wide truncate">
+                          {activeField?.optionLabels?.[option] || option}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {hiddenCount > 0 && (
+                    <div className="text-center py-3 text-[var(--text-muted)] text-[10px] tracking-widest">
+                      SHOWING {visibleOptions.length.toLocaleString()} OF{' '}
+                      {filteredOptions.length.toLocaleString()} — SEARCH TO NARROW
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Footer ── */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-primary)]/60 flex-shrink-0">
+              <button
+                onClick={clearAll}
+                className="text-[9px] text-red-400/70 hover:text-red-300 tracking-widest transition-colors"
+              >
+                CLEAR ALL
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={onClose}
+                  className="text-[9px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] tracking-widest border border-[var(--border-primary)] px-4 py-1.5 hover:bg-[var(--bg-tertiary)]/50 transition-all"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={handleApply}
+                  className={`text-[9px] ${c.text} tracking-widest border ${c.border} px-4 py-1.5 ${c.bg} ${c.bgHover} transition-all font-semibold`}
+                >
+                  APPLY{totalSelected > 0 ? ` (${totalSelected})` : ''}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

@@ -760,14 +760,14 @@ export default function TopRightControls({
   const nodeLauncherModal =
     portalReady && launcherOpen
       ? createPortal(
-          <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4">
             <button
               type="button"
               aria-label="Close node launcher"
               onClick={closeLauncher}
               className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
             />
-            <div className="relative z-[1201] w-full max-w-[520px] border border-cyan-700/40 bg-[var(--bg-primary)]/96 backdrop-blur-sm shadow-[0_0_32px_rgba(0,255,255,0.12)]">
+            <div className="relative z-[9999] w-full max-w-[520px] border border-cyan-700/40 bg-[var(--bg-primary)]/96 backdrop-blur-sm shadow-[0_0_32px_rgba(0,255,255,0.12)]">
               <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/30">
                 <div>
                   <div className="text-[10px] font-mono tracking-[0.24em] text-cyan-300">
@@ -1038,14 +1038,14 @@ export default function TopRightControls({
   const terminalLauncherModal =
     portalReady && terminalLauncherOpen
       ? createPortal(
-          <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4">
             <button
               type="button"
               aria-label="Close terminal launcher"
               onClick={closeTerminalLauncher}
               className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
             />
-            <div className="relative z-[1201] w-full max-w-[640px] border border-cyan-700/40 bg-[var(--bg-primary)]/96 backdrop-blur-sm shadow-[0_0_32px_rgba(0,255,255,0.12)]">
+            <div className="relative z-[9999] w-full max-w-[640px] border border-cyan-700/40 bg-[var(--bg-primary)]/96 backdrop-blur-sm shadow-[0_0_32px_rgba(0,255,255,0.12)]">
               <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/30">
                 <div>
                   <div className="text-[13px] font-mono tracking-[0.24em] text-cyan-300">

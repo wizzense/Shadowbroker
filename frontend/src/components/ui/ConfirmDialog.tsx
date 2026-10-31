@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef } from 'react';
+import ModalPortal from './ModalPortal';
 
 interface Props {
   open: boolean;
@@ -53,64 +54,66 @@ const ConfirmDialog: React.FC<Props> = ({
   const accentColor = danger ? '#ef4444' : '#8b5cf6';
 
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 99999, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(2px)' }}
-      onClick={onCancel}
-      onKeyDown={handleKeyDown}
-    >
+    <ModalPortal>
       <div
-        className="bg-[#0d0d1a] border-2 font-mono text-white max-w-sm w-full mx-4"
-        style={{
-          borderColor: `${accentColor}88`,
-          boxShadow: `0 20px 60px rgba(0,0,0,0.8), 0 0 0 1px ${accentColor}33`,
-        }}
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 flex items-center justify-center"
+        style={{ zIndex: 99999, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(2px)' }}
+        onClick={onCancel}
+        onKeyDown={handleKeyDown}
       >
-        {/* Header */}
         <div
-          className="px-4 py-2.5 border-b text-[11px] uppercase tracking-[0.2em] font-bold"
-          style={{ borderColor: `${accentColor}44`, background: `${accentColor}15`, color: accentColor }}
+          className="bg-[#0d0d1a] border-2 font-mono text-white max-w-sm w-full mx-4"
+          style={{
+            borderColor: `${accentColor}88`,
+            boxShadow: `0 20px 60px rgba(0,0,0,0.8), 0 0 0 1px ${accentColor}33`,
+          }}
+          onClick={(e) => e.stopPropagation()}
         >
-          {title}
-        </div>
-
-        {/* Body */}
-        <div className="px-4 py-4">
-          <p className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-wrap">{message}</p>
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 px-4 pb-4">
-          <button
-            ref={confirmBtnRef}
-            type="button"
-            onClick={onConfirm}
-            className="flex-1 py-2 text-[11px] font-mono tracking-wider border transition-colors"
-            style={{
-              background: `${accentColor}30`,
-              borderColor: `${accentColor}66`,
-              color: danger ? '#fca5a5' : '#c4b5fd',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = `${accentColor}50`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = `${accentColor}30`;
-            }}
+          {/* Header */}
+          <div
+            className="px-4 py-2.5 border-b text-[11px] uppercase tracking-[0.2em] font-bold"
+            style={{ borderColor: `${accentColor}44`, background: `${accentColor}15`, color: accentColor }}
           >
-            {confirmLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-[11px] font-mono tracking-wider border border-gray-600/40 text-gray-400 hover:text-white hover:border-gray-500/60 transition-colors"
-          >
-            {cancelLabel}
-          </button>
+            {title}
+          </div>
+
+          {/* Body */}
+          <div className="px-4 py-4">
+            <p className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-wrap">{message}</p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 px-4 pb-4">
+            <button
+              ref={confirmBtnRef}
+              type="button"
+              onClick={onConfirm}
+              className="flex-1 py-2 text-[11px] font-mono tracking-wider border transition-colors"
+              style={{
+                background: `${accentColor}30`,
+                borderColor: `${accentColor}66`,
+                color: danger ? '#fca5a5' : '#c4b5fd',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = `${accentColor}50`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = `${accentColor}30`;
+              }}
+            >
+              {confirmLabel}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 text-[11px] font-mono tracking-wider border border-gray-600/40 text-gray-400 hover:text-white hover:border-gray-500/60 transition-colors"
+            >
+              {cancelLabel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 };
 
