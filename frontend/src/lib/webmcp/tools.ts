@@ -4,6 +4,13 @@
  * toggle_layer), which change what the operator looks at and nothing else.
  */
 import { civicLayerUrl, CIVIC_MAX_RADIUS_KM, type CivicLayerKey } from '@/lib/civicLayers';
+import {
+  CIVIC_STATE_CODES,
+  CIVIC_UNIT_KINDS,
+  civicElectionsUrl,
+  civicLookupUrl,
+  civicUnitsUrl,
+} from '@/lib/civicDirectory';
 import { clampLimit, DEFAULT_LIST, redactDeep, trimEntity } from './bound';
 import {
   DATA_LAYERS,
@@ -17,7 +24,7 @@ import {
   matchesQuery,
   resolveLayers,
 } from './layers';
-import type { LiveBounds, ToolDefinition } from './types';
+import type { JsonSchemaProperty, LiveBounds, ToolDefinition } from './types';
 
 const LAYER_DESC =
   `Data layer id (${DATA_LAYERS.map((l) => l.id).join(', ')}) or group (${Object.keys(LAYER_GROUPS).join(', ')}).`;
@@ -396,6 +403,112 @@ const getCivicAt: ToolDefinition = {
   },
 };
 
+
+// ─── Civic directory: elections, officials, local governments ───────────────
+
+const US_STATE_NAMES: Record<string, string> = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO',
+  connecticut: 'CT', delaware: 'DE', 'district of columbia': 'DC', florida: 'FL', georgia: 'GA',
+  hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA', kansas: 'KS', kentucky: 'KY',
+  louisiana: 'LA', maine: 'ME', maryland: 'MD', massachusetts: 'MA', michigan: 'MI', minnesota: 'MN',
+  mississippi: 'MS', missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH',
+  'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND',
+  ohio: 'OH', oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI',
+  'south carolina': 'SC', 'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
+  virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
+};
+
+/** "Texas", "tx", "TX" -> "TX". Throws a message the model can act on. */
+export function resolveStateCode(v: unknown): string {
+  const raw = String(v ?? '').trim();
+  const up = raw.toUpperCase();
+  if (CIVIC_STATE_CODES.has(up)) return up;
+  const byName = US_STATE_NAMES[raw.toLowerCase().replace(/\s+/g, ' ')];
+  if (byName && CIVIC_STATE_CODES.has(byName)) return byName;
+  throw new Error(`state must be a US state name or two-letter code (got "${raw}")`);
+}
+
+const STATE_ARG: JsonSchemaProperty = { type: 'string', description: 'US state: name ("Texas") or two-letter code ("TX").' };
+
+const getElections: ToolDefinition = {
+  name: 'get_elections',
+  description:
+    'Upcoming US elections for a state (federal, state and special elections) plus the official how-to-vote links (registration, polling places, absentee) from the state election office. Use for any question about elections, voting or ballots in a state.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      state: STATE_ARG,
+      district: { type: 'string', description: 'Optional US House district number, narrows special elections.' },
+    },
+    required: ['state'],
+  },
+  readOnly: true,
+  async execute(args, ctx, signal) {
+    const state = resolveStateCode(args.state);
+    const district = typeof args.district === 'string' || typeof args.district === 'number' ? String(args.district) : undefined;
+    const [elections, howToVote] = await Promise.all([
+      ctx.fetchJson(civicElectionsUrl(state, district), signal).catch((e) => ({ error: String(e?.message ?? e) })),
+      ctx.fetchJson(`/api/civic-proxy/how-to-vote/${state}`, signal).catch((e) => ({ error: String(e?.message ?? e) })),
+    ]);
+    return { state, elections: redactDeep(elections), how_to_vote: redactDeep(howToVote) };
+  },
+};
+
+const getOfficialsAt: ToolDefinition = {
+  name: 'get_officials_at',
+  description:
+    'Who represents a US location: every district it sits in and the elected officials for it, federal (President, Senators, House rep), state (governor, legislators), county, city and school board, with how-to-vote links. Needs lat/lng; if the user names a place, use its coordinates (fly_to does not return them, so use your knowledge of the place).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      lat: { type: 'number', minimum: -90, maximum: 90 },
+      lng: { type: 'number', minimum: -180, maximum: 180 },
+    },
+    required: ['lat', 'lng'],
+  },
+  readOnly: true,
+  async execute(args, ctx, signal) {
+    const { lat, lng } = requireLatLng(args);
+    return { lat, lng, lookup: redactDeep(await ctx.fetchJson(civicLookupUrl(lat, lng), signal)) };
+  },
+};
+
+const getLocalGovernments: ToolDefinition = {
+  name: 'get_local_governments',
+  description: `Local governments in a US state: ${CIVIC_UNIT_KINDS.join(', ')} (school boards are school districts). Optional 3-digit county FIPS narrows it.`,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      state: STATE_ARG,
+      county: { type: 'string', description: 'Optional 3-digit county FIPS code.' },
+      kind: { type: 'string', enum: [...CIVIC_UNIT_KINDS], description: 'Optional filter.' },
+      limit: { type: 'integer', minimum: 1, maximum: 50 },
+    },
+    required: ['state'],
+  },
+  readOnly: true,
+  async execute(args, ctx, signal) {
+    const state = resolveStateCode(args.state);
+    const county = typeof args.county === 'string' && /^\d{3}$/.test(args.county) ? args.county : undefined;
+    const kind = typeof args.kind === 'string' ? args.kind : '';
+    const limit = clampLimit(args.limit, 25);
+    const body = (await ctx.fetchJson(civicUnitsUrl(state, county), signal)) as Record<string, unknown> | unknown[];
+    const list: unknown[] = Array.isArray(body)
+      ? body
+      : Array.isArray((body as Record<string, unknown>)?.units)
+        ? ((body as Record<string, unknown>).units as unknown[])
+        : [];
+    const filtered = kind ? list.filter((u) => (u as Record<string, unknown>)?.kind === kind) : list;
+    return {
+      state,
+      county: county ?? null,
+      kind: kind || null,
+      total: filtered.length,
+      units: filtered.slice(0, limit).map((u) => trimEntity(u, { maxFields: 10 })),
+    };
+  },
+};
+
 /** The full tool set, in the order a model should consider them. */
 export function createShadowbrokerTools(): ToolDefinition[] {
   return [
@@ -406,6 +519,9 @@ export function createShadowbrokerTools(): ToolDefinition[] {
     getEntity,
     getNewsFeed,
     getCivicAt,
+    getElections,
+    getOfficialsAt,
+    getLocalGovernments,
     flyTo,
     showEntity,
     toggleLayer,

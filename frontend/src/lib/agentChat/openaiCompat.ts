@@ -229,6 +229,10 @@ export function createOpenAICompatAdapter(opts: OpenAICompatOptions): ModelAdapt
         body: JSON.stringify(body),
         signal: req.signal,
       });
+      if (res.status === 401 || res.status === 403) {
+        // The daemon's own text names a header a web page cannot send; say what works here.
+        throw new Error(`${opts.label}: HTTP ${res.status} — ${opts.authHint}`);
+      }
       if (!res.ok) throw new Error(`${opts.label}: HTTP ${res.status} — ${await errorDetail(res)}`);
       return readChatResponse(res, req.onText);
     },

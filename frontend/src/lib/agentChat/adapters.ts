@@ -44,11 +44,11 @@ export function awdkAdapter(deps: AdapterDeps = {}): ModelAdapter {
     blockedHint:
       'awdk on :9001 is not running, or refused this origin (offline mode narrows CORS to loopback; set AITHER_CORS_ORIGINS or go online).',
     authHint:
-      'awdk requires a credential: paste AITHER_SERVER_API_KEY, or run with AITHER_LOCAL_AUTH=off. (Its daemon-token header is not CORS-allowed for pages.)',
+      'Your awdk daemon requires its local token. Paste the contents of ~/.aither/daemon-token (on Windows: %USERPROFILE%\\.aither\\daemon-token) below; it is sent as a Bearer, which the daemon accepts.',
     credential: {
-      label: 'awdk bearer',
-      placeholder: 'AITHER_SERVER_API_KEY or abt_ browser token',
-      help: 'Kept in this tab only (sessionStorage).',
+      label: 'awdk daemon token',
+      placeholder: 'contents of ~/.aither/daemon-token (or AITHER_SERVER_API_KEY)',
+      help: 'Kept in this tab only (sessionStorage), sent only to 127.0.0.1:9001. Grants this page full use of your local daemon.',
     },
   });
 }

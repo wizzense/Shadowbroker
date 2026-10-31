@@ -85,6 +85,9 @@ export async function runAgentLoop(opts: RunLoopOptions): Promise<ChatMessage[]>
     }
 
     added.push({ role: 'assistant', content, tool_calls: calls });
+    // Replace the streamed text (for prompted backends it still holds the raw
+    // tool-call JSON) with what is left after the calls were parsed out.
+    emit({ type: 'assistant', content });
     for (const [i, call] of calls.entries()) {
       emit({ type: 'tool_call', call });
       let payload: string;

@@ -42,7 +42,44 @@ function parseOne(raw: string, n: number): ChatToolCall | null {
   }
 }
 
-/** Extract tool calls from model text; `text` is what remains for display. */
+/** Every balanced top-level `{...}` span in `text` (string-aware), in order. */
+function jsonObjectSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  let depth = 0;
+  let start = -1;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = depth > 0;
+    else if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}' && depth > 0) {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        spans.push([start, i + 1]);
+        start = -1;
+      }
+    }
+  }
+  return spans;
+}
+
+/**
+ * Extract tool calls from model text; `text` is what remains for display.
+ *
+ * Accepts `<tool_call>{...}</tool_call>`, and — because Qwen-family tokenizers
+ * treat `<tool_call>` as a SPECIAL token that decoding strips — a bare
+ * `{"name": ..., "arguments": ...}` object, with or without a stray closing tag
+ * or a ```json fence around it.
+ */
 export function parseToolCalls(content: string): { calls: ChatToolCall[]; text: string } {
   const calls: ChatToolCall[] = [];
   let text = content.replace(TAGGED, (_m, body: string) => {
@@ -60,6 +97,21 @@ export function parseToolCalls(content: string): { calls: ChatToolCall[]; text: 
       return m;
     });
   }
+  if (calls.length === 0) {
+    // Bare JSON objects (opening tag stripped by the tokenizer).
+    const spans = jsonObjectSpans(text);
+    let rebuilt = '';
+    let cursor = 0;
+    for (const [a, b] of spans) {
+      const c = parseOne(text.slice(a, b), calls.length);
+      if (!c) continue;
+      calls.push(c);
+      rebuilt += text.slice(cursor, a);
+      cursor = b;
+    }
+    if (calls.length > 0) text = rebuilt + text.slice(cursor);
+  }
+  text = text.replace(/<\/?tool_call>/g, '').replace(/```(?:json|tool_call)?\s*```/g, '');
   return { calls, text: text.trim() };
 }
 

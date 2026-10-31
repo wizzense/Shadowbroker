@@ -132,7 +132,7 @@ describe('health probes', () => {
     );
     const h = await awdkAdapter({ fetchImpl, getToken: () => '' }).probe();
     expect(h.state).toBe('auth');
-    expect(h.detail).toMatch(/AITHER_SERVER_API_KEY/);
+    expect(h.detail).toMatch(/daemon-token/);
     expect(h.detail).toMatch(/offline/);
   });
 

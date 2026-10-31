@@ -117,6 +117,14 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers,
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  // Live progress for the turn in flight: phase, started-at and chars generated.
+  const [status, setStatus] = useState<{ phase: string; since: number; chars: number } | null>(null);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => setTick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, [busy]);
   const [showSettings, setShowSettings] = useState(false);
   const [secretDraft, setSecretDraft] = useState('');
   const [webmcp, setWebmcp] = useState<{ mode: WebMcpMode; count: number }>({ mode: 'unavailable', count: 0 });
@@ -219,6 +227,7 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers,
     if (!text || busy) return;
     setInput('');
     setBusy(true);
+    setStatus({ phase: 'sending to model…', since: Date.now(), chars: 0 });
     const ctl = new AbortController();
     abortRef.current = ctl;
     const userMsg: ChatMessage = { role: 'user', content: text };
@@ -252,9 +261,18 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers,
         model: currentModel,
         signal: ctl.signal,
         onEvent: (e) => {
-          if (e.type === 'text') appendStreaming(e.delta);
-          else if (e.type === 'round' && e.round > 1) appendStreaming('');
-          else if (e.type === 'tool_call') {
+          if (e.type === 'text') {
+            appendStreaming(e.delta);
+            setStatus((st) => (st ? { ...st, phase: 'generating…', chars: st.chars + e.delta.length } : st));
+          } else if (e.type === 'round') {
+            setStatus((st) => ({
+              phase: e.round > 1 ? `round ${e.round}: model reading tool results…` : 'waiting for first token…',
+              since: st?.since ?? Date.now(),
+              chars: 0,
+            }));
+            if (e.round > 1) appendStreaming('');
+          } else if (e.type === 'tool_call') {
+            setStatus((st) => (st ? { ...st, phase: `running tool ${e.call.name}…` } : st));
             closeStreaming();
             setItems((it) => [...it, { kind: 'tool', id: e.call.id, name: e.call.name, args: e.call.arguments }]);
           } else if (e.type === 'tool_result') {
@@ -271,9 +289,12 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers,
       closeStreaming();
       const msg = (e as Error)?.name === 'AbortError' ? 'stopped' : (e as Error)?.message || String(e);
       setItems((it) => [...it, { kind: 'error', text: msg }]);
+      // A credential problem: open the credential field right where the error is.
+      if (/(401|403)/.test(msg)) setShowSettings(true);
       setHistory(convo);
     } finally {
       setBusy(false);
+      setStatus(null);
       abortRef.current = null;
     }
   };
@@ -380,7 +401,7 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers,
             <div className="h-1 bg-cyan-500 rounded" style={{ width: `${Math.round(bonsaiProgress * 100)}%` }} />
           </div>
         )}
-        {showSettings && adapter.credential && (
+        {(showSettings || h?.state === 'auth') && adapter.credential && (
           <div className="space-y-1 pt-1">
             <label className="block text-[10px] text-gray-400">{adapter.credential.label}</label>
             <div className="flex gap-1">
@@ -426,7 +447,18 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers,
             <div key={i} className="text-red-400 whitespace-pre-wrap">{item.text}</div>
           ),
         )}
-        {busy && <Loader2 size={12} className="animate-spin text-cyan-500" />}
+        {busy && (
+          <div className="flex items-center gap-1.5 text-[10px] text-cyan-500" role="status" aria-live="polite">
+            <Loader2 size={12} className="animate-spin" />
+            <span>{status?.phase ?? 'working…'}</span>
+            {status && (
+              <span className="text-gray-500">
+                {Math.round((Date.now() - status.since) / 1000)}s
+                {status.chars > 0 ? ` · ${status.chars} chars` : ''}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <form
