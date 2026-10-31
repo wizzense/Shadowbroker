@@ -45,6 +45,7 @@ import {
   MapPin,
   Truck,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import RoadCorridorLayerControls from '@/components/RoadCorridorLayerControls';
 import { API_BASE } from '@/lib/api';
@@ -63,6 +64,7 @@ import {
   saveLayerSectionExpanded,
 } from '@/lib/layerPreferences';
 import { gtLeanLayerWarning, useRuntimeProfile } from '@/hooks/useRuntimeProfile';
+import { filterLayerSections, isLayerFilterActive } from '@/lib/layerSearch';
 
 function relativeTime(iso: string | undefined): string {
   if (!iso) return '';
@@ -1584,6 +1586,16 @@ const WorldviewLeftPanel = React.memo(function WorldviewLeftPanel({
   );
   const [sectionPrefsHydrated, setSectionPrefsHydrated] = useState(false);
 
+  // Layer search: filter rows by name / source / section text, or active-only.
+  const [layerQuery, setLayerQuery] = useState('');
+  const [onlyActiveLayers, setOnlyActiveLayers] = useState(false);
+  const layerFilterOn = isLayerFilterActive({ query: layerQuery, onlyActive: onlyActiveLayers });
+  const visibleSections = filterLayerSections(sections, {
+    query: layerQuery,
+    onlyActive: onlyActiveLayers,
+    activeLayers: activeLayers as unknown as Record<string, unknown>,
+  });
+
   useEffect(() => {
     setExpandedSections(loadLayerSectionExpanded());
     setSectionPrefsHydrated(true);
@@ -1722,6 +1734,49 @@ const WorldviewLeftPanel = React.memo(function WorldviewLeftPanel({
           </div>
         </div>
 
+        {/* Layer search + active-only filter (stays above the scrolling list) */}
+        {!isMinimized && (
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-cyan-900/40 flex-shrink-0">
+            <div className="relative flex-1 min-w-0">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-cyan-700 pointer-events-none" />
+              <input
+                type="search"
+                value={layerQuery}
+                onChange={(e) => setLayerQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setLayerQuery('');
+                }}
+                placeholder="Filter layers or sources"
+                aria-label="Filter data layers by name or source"
+                className="w-full bg-black/40 border border-cyan-900/50 focus:border-cyan-600/70 outline-none pl-7 pr-6 py-1 text-[11px] font-mono text-cyan-200 placeholder:text-cyan-900"
+              />
+              {layerQuery && (
+                <button
+                  type="button"
+                  onClick={() => setLayerQuery('')}
+                  aria-label="Clear layer filter"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-cyan-700 hover:text-cyan-300"
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setOnlyActiveLayers((v) => !v)}
+              aria-pressed={onlyActiveLayers}
+              title="Show only layers that are switched on"
+              className={`shrink-0 px-2 py-1 border text-[9px] font-mono tracking-widest transition-colors ${
+                onlyActiveLayers
+                  ? 'border-cyan-500/70 text-cyan-300 bg-cyan-950/50'
+                  : 'border-cyan-900/50 text-cyan-700 hover:text-cyan-400'
+              }`}
+            >
+              ACTIVE
+            </button>
+          </div>
+        )}
+
         <AnimatePresence>
           {!isMinimized && (
             <motion.div
@@ -1822,7 +1877,13 @@ const WorldviewLeftPanel = React.memo(function WorldviewLeftPanel({
                   </div>
                 )}
 
-                {sections.map((section) => {
+                {layerFilterOn && visibleSections.length === 0 && (
+                  <div className="text-[11px] font-mono text-[var(--text-muted)] tracking-wider">
+                    No layers match{layerQuery ? ` "${layerQuery}"` : ''}
+                    {onlyActiveLayers ? ' among active layers' : ''}.
+                  </div>
+                )}
+                {visibleSections.map((section) => {
                   const SectionIcon = section.icon;
                   const sectionLayerIds = section.layers.map((l) => l.id);
                   const allOn = sectionLayerIds.every(
@@ -1832,7 +1893,8 @@ const WorldviewLeftPanel = React.memo(function WorldviewLeftPanel({
                     (id) => activeLayers[id as keyof typeof activeLayers],
                   );
                   const expanded =
-                    expandedSections[section.id] ?? getDefaultLayerSectionExpanded()[section.id] ?? false;
+                    layerFilterOn ||
+                    (expandedSections[section.id] ?? getDefaultLayerSectionExpanded()[section.id] ?? false);
                   const totalCount = section.layers.reduce(
                     (sum, l) => sum + ((l.count as number) || 0),
                     0,

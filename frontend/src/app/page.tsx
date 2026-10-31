@@ -72,6 +72,15 @@ import { useTranslation } from '@/i18n';
 import { LocateBar } from './LocateBar';
 import { SentinelInfoModal } from './SentinelInfoModal';
 import SarAoiEditorModal from '@/components/SarAoiEditorModal';
+import {
+  FloatingPanel,
+  PanelDock,
+  PanelFloatLayer,
+  PanelsMenu,
+  PanelWorkspaceProvider,
+  usePanelWorkspace,
+} from '@/components/panels';
+import { patchPanel } from '@/lib/panelLayout';
 
 // Use dynamic loads for Maplibre to avoid SSR window is not defined errors
 const MaplibreViewer = dynamic(() => import('@/components/MaplibreViewer'), { ssr: false });
@@ -83,6 +92,21 @@ const InfonetTerminal = dynamic(() => import('@/components/InfonetTerminal'), { 
 // LocateBar and SentinelInfoModal extracted to page-local modules (Sprint 4B)
 
 export default function Dashboard() {
+  return (
+    <PanelWorkspaceProvider>
+      <DashboardInner />
+    </PanelWorkspaceProvider>
+  );
+}
+
+function DashboardInner() {
+  const { layout: panelLayout, update: updatePanelLayout } = usePanelWorkspace();
+  const dockWidths = panelLayout.docks;
+  /** Make sure a workspace panel is visible (un-close + expand) before routing into it. */
+  const revealPanel = useCallback(
+    (id: string) => updatePanelLayout((l) => patchPanel(l, id, { closed: false, minimized: false })),
+    [updatePanelLayout],
+  );
   const viewBoundsRef = useRef<{ south: number; west: number; north: number; east: number } | null>(null);
   const { t } = useTranslation();
   // Start the critical map data request before panel/control-plane effects.
@@ -376,9 +400,10 @@ export default function Dashboard() {
     ) => {
       setLeftOpen(true);
       setLeftMeshExpanded(true);
+      revealPanel('mesh-chat');
       setMeshChatLaunchRequest({ tab, gate, peerId, showSas, nonce: Date.now() });
     },
-    [],
+    [revealPanel],
   );
 
   const openLiveGateFromShell = useCallback((gate: string) => {
@@ -394,16 +419,14 @@ export default function Dashboard() {
     [launchMeshChatTab],
   );
 
-  // Right panel: which panel is "focused" (expanded). null = none focused, all normal.
-  const [rightFocusedPanel, setRightFocusedPanel] = useState<string | null>(null);
-
   // Auto-expand Data Layers when user starts tracking an SDR/Scanner
   useEffect(() => {
     if (trackedSdr || trackedScanner) {
       setLeftDataMinimized(false);
       setLeftOpen(true);
+      revealPanel('data-layers');
     }
-  }, [trackedSdr, trackedScanner]);
+  }, [trackedSdr, trackedScanner, revealPanel]);
 
   // NASA GIBS satellite imagery state
   const [gibsDate, setGibsDate] = useState<string>(() => {
@@ -619,15 +642,26 @@ export default function Dashboard() {
 
             {/* SYSTEM METRICS TOP RIGHT — removed, label moved into TimelineScrubber */}
 
-            {/* LEFT HUD CONTAINER — mirrors right side: one scroll container, scrollbar on LEFT edge */}
-            <motion.div
-              className="absolute left-6 top-24 bottom-9 w-80 flex flex-col gap-3 z-[201] pointer-events-auto overflow-y-auto styled-scrollbar pl-2 pr-2 hud-zone"
-              style={{ direction: 'rtl' }}
-              animate={{ x: leftOpen ? 0 : -360 }}
-              transition={{ type: 'spring', damping: 30, stiffness: 250 }}
+            {/* PANEL WORKSPACE — floating layer + PANELS menu. Every HUD panel
+                below is a <FloatingPanel>: docked into a column by default,
+                draggable/resizable/collapsible/pop-out, layout persisted. */}
+            <PanelFloatLayer className="z-[205]" />
+            <PanelsMenu className="absolute top-2 left-1/2 -translate-x-1/2 z-[206]" />
+
+            {/* LEFT DOCK — scrollbar on LEFT edge */}
+            <PanelDock side="left" open={leftOpen} className="left-6 top-24 bottom-9 z-[201]" />
+
+            {/* 1. DATA LAYERS (Top) */}
+            <FloatingPanel
+              id="data-layers"
+              title="DATA LAYERS"
+              defaultDock="left"
+              order={0}
+              role="primary"
+              dockGrow
+              minHeight={200}
+              defaultRect={(vp) => ({ x: 24, y: 96, w: 360, h: vp.height - 132 })}
             >
-              {/* 1. DATA LAYERS (Top) */}
-              <div className="contents" style={{ direction: 'ltr' }}>
                 {secondaryBootReady ? (
                   <ErrorBoundary name="WorldviewLeftPanel">
                     <WorldviewLeftPanel
@@ -665,11 +699,11 @@ export default function Dashboard() {
                     <div className="mt-3 text-[10px] tracking-wider">{t('nav.prioritizingMapFeeds')}</div>
                   </div>
                 )}
-              </div>
+            </FloatingPanel>
 
               {/* 2. MESHTASTIC CHAT (Middle) */}
               {secondaryBootReady && (
-                <div className="contents" style={{ direction: 'ltr' }}>
+                <FloatingPanel id="mesh-chat" title="MESH CHAT" defaultDock="left" order={10} role="primary">
                   <MeshChat
                     onFlyTo={handleFlyTo}
                     expanded={leftMeshExpanded}
@@ -680,12 +714,12 @@ export default function Dashboard() {
                     onOpenDeadDrop={openDeadDropFromShell}
                     launchRequest={meshChatLaunchRequest}
                   />
-                </div>
+                </FloatingPanel>
               )}
 
               {/* 3. SHODAN CONNECTOR (Bottom) */}
               {secondaryBootReady && (
-                <div className="contents" style={{ direction: 'ltr' }}>
+                <FloatingPanel id="shodan" title="SHODAN CONNECTOR" defaultDock="left" order={20}>
                   <ShodanPanel
                     currentResults={shodanResults}
                     onOpenSettings={() => setSettingsOpen(true)}
@@ -700,34 +734,39 @@ export default function Dashboard() {
                     isMinimized={leftShodanMinimized}
                     onMinimizedChange={setLeftShodanMinimized}
                   />
-                </div>
+                </FloatingPanel>
               )}
 
-              {/* 4. RECON + SCM */}
+              {/* 4. RECON + SCM + CYBER */}
               {secondaryBootReady && (
-                <div className="contents" style={{ direction: 'ltr' }}>
-                  <ReconPanel />
-                  <ScmPanel layerEnabled={activeLayers.scm_suppliers} />
-                  <CyberThreatPanel layerEnabled={activeLayers.cyber_threats} />
-                </div>
+                <>
+                  <FloatingPanel id="recon" title="RECON TOOLKIT" defaultDock="left" order={30}>
+                    <ReconPanel />
+                  </FloatingPanel>
+                  <FloatingPanel id="supply-chain" title="SUPPLY CHAIN" defaultDock="left" order={40}>
+                    <ScmPanel layerEnabled={activeLayers.scm_suppliers} />
+                  </FloatingPanel>
+                  <FloatingPanel id="cyber-threats" title="CYBER THREATS" defaultDock="left" order={50}>
+                    <CyberThreatPanel layerEnabled={activeLayers.cyber_threats} />
+                  </FloatingPanel>
+                </>
               )}
 
               {/* 5. AI INTEL */}
               {secondaryBootReady && (
-                <div className="contents" style={{ direction: 'ltr' }}>
+                <FloatingPanel id="ai-intel" title="AI INTEL" defaultDock="left" order={60}>
                   <AIIntelPanel
                     onFlyTo={handleFlyTo}
                     pinPlacementMode={pinPlacementMode}
                     onPinPlacementModeChange={setPinPlacementMode}
                   />
-                </div>
+                </FloatingPanel>
               )}
-            </motion.div>
 
             {/* LEFT SIDEBAR TOGGLE TAB — aligns with Data Layers section */}
             <motion.div
               className="absolute left-0 top-[12.5rem] z-[201] pointer-events-auto hud-zone"
-              animate={{ x: leftOpen ? 344 : 0 }}
+              animate={{ x: leftOpen ? dockWidths.left.width + 24 : 0 }}
               transition={{ type: 'spring', damping: 30, stiffness: 250 }}
             >
               <button
@@ -747,7 +786,7 @@ export default function Dashboard() {
             {/* RIGHT SIDEBAR TOGGLE TAB */}
             <motion.div
               className="absolute right-0 top-[12.5rem] z-[201] pointer-events-auto hud-zone"
-              animate={{ x: rightOpen ? -424 : 0 }}
+              animate={{ x: rightOpen ? -(dockWidths.right.width + 24) : 0 }}
               transition={{ type: 'spring', damping: 30, stiffness: 250 }}
             >
               <button
@@ -764,12 +803,8 @@ export default function Dashboard() {
               </button>
             </motion.div>
 
-            {/* RIGHT HUD CONTAINER — slides off right edge when hidden */}
-            <motion.div
-              className="absolute right-6 top-24 bottom-9 w-[400px] flex flex-col gap-4 z-[200] pointer-events-auto overflow-y-auto styled-scrollbar pr-2 pl-2 hud-zone"
-              animate={{ x: rightOpen ? 0 : 440 }}
-              transition={{ type: 'spring', damping: 30, stiffness: 250 }}
-            >
+            {/* RIGHT DOCK — slides off right edge when hidden; controls pinned on top */}
+            <PanelDock side="right" open={rightOpen} className="right-6 top-24 bottom-9 z-[200]">
               <TopRightControls
                 onTerminalToggle={openInfonet}
                 onInfonetToggle={toggleInfonet}
@@ -795,20 +830,19 @@ export default function Dashboard() {
                   }}
                 />
               </div>
-
-              {/* GLOBAL TICKER REPLACES MARKETS PANEL - RENDERED OUTSIDE THIS DIV */}
+            </PanelDock>
 
               {/* EVENT TIMELINE */}
               {secondaryBootReady && (
-                <div className={`flex-shrink-0 ${rightFocusedPanel && rightFocusedPanel !== 'predictions' ? 'hidden' : ''}`}>
+                <FloatingPanel id="time-machine" title="TIME MACHINE" defaultDock="right" order={10}>
                   <ErrorBoundary name="TimelinePanel">
                     <TimelinePanel />
                   </ErrorBoundary>
-                </div>
+                </FloatingPanel>
               )}
 
               {/* DATA FILTERS */}
-              <div className={`flex-shrink-0 ${rightFocusedPanel && rightFocusedPanel !== 'filters' ? 'hidden' : ''}`}>
+              <FloatingPanel id="data-filters" title="DATA FILTERS" defaultDock="right" order={20}>
                 <ErrorBoundary name="FilterPanel">
                   <FilterPanel
                     activeFilters={activeFilters}
@@ -817,10 +851,19 @@ export default function Dashboard() {
                     onEnableLayers={enableLayers}
                   />
                 </ErrorBoundary>
-              </div>
+              </FloatingPanel>
 
               {/* BOTTOM RIGHT - NEWS FEED (fills remaining space) */}
-              <div className={`flex-1 min-h-0 flex flex-col ${rightFocusedPanel ? 'hidden' : ''}`}>
+              <FloatingPanel
+                id="intel-feed"
+                title="GLOBAL THREAT INTERCEPT"
+                defaultDock="right"
+                order={30}
+                role="primary"
+                dockGrow
+                minHeight={200}
+                defaultRect={(vp) => ({ x: vp.width - 640, y: 96, w: 600, h: vp.height - 132 })}
+              >
                 <ErrorBoundary name="NewsFeed">
                   <NewsFeed
                     selectedEntity={selectedEntity}
@@ -832,8 +875,7 @@ export default function Dashboard() {
                     onArticleClick={handleArticleClick}
                   />
                 </ErrorBoundary>
-              </div>
-            </motion.div>
+              </FloatingPanel>
 
             {/* BOTTOM CENTER COORDINATE / LOCATION BAR — hidden when fullscreen overlays are open */}
             {!(selectedEntity?.type === 'region_dossier' && regionDossier?.sentinel2) && selectedEntity?.type !== 'cctv' && selectedEntity?.type !== 'news' && (
