@@ -182,8 +182,8 @@ import {
   telegramMapPinCoords,
 } from '@/components/map/geoJSONBuilders';
 
-import { useViewportBounds } from '@/components/map/hooks/useViewportBounds';
-import { getLiveDataBounds } from '@/lib/liveDataViewport';
+import { announceViewTarget, useViewportBounds } from '@/components/map/hooks/useViewportBounds';
+import { estimateViewBounds, getLiveDataBounds } from '@/lib/liveDataViewport';
 import { MeasurementLayers } from '@/components/map/layers/MeasurementLayers';
 import { sameEntityId } from '@/components/map/featureIds';
 import { buildCctvProxyUrl } from '@/lib/cctvProxy';
@@ -776,11 +776,14 @@ const MaplibreViewer = ({
       const { clientWidth, clientHeight } = map.getContainer();
       const padding = Math.min(64, Math.min(clientWidth, clientHeight) / 6);
       const cam = map.cameraForBounds(flyToLocation.bounds, { padding, maxZoom: ZOOM_MAX });
+      const targetZoom = cam ? clampZoom(cam.zoom ?? ZOOM_FALLBACK) : ZOOM_FALLBACK;
       map.flyTo({
         center: cam?.center ?? [flyToLocation.lng, flyToLocation.lat],
-        zoom: cam ? clampZoom(cam.zoom ?? ZOOM_FALLBACK) : ZOOM_FALLBACK,
+        zoom: targetZoom,
         duration: 1500,
       });
+      // Area-scoped feeds (civic) follow the destination now, not on moveend.
+      announceViewTarget(estimateViewBounds(flyToLocation.lat, flyToLocation.lng, targetZoom, clientWidth, clientHeight));
       return;
     }
 
@@ -792,6 +795,10 @@ const MaplibreViewer = ({
       zoom: flyToLocation.zoom ?? 8,
       duration: 1500,
     });
+    const { clientWidth, clientHeight } = map.getContainer();
+    announceViewTarget(
+      estimateViewBounds(flyToLocation.lat, flyToLocation.lng, flyToLocation.zoom ?? 8, clientWidth, clientHeight),
+    );
   }, [flyToLocation]);
 
   const earthquakesGeoJSON = useMemo(

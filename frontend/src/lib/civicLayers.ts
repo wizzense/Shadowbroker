@@ -13,6 +13,7 @@
  * quota is charged once per cached area instead of once per viewer).
  */
 import type { LiveDataBounds, } from '@/lib/liveDataViewport';
+import { stateCenter, statesIntersectingBounds } from '@/lib/civicDirectory';
 
 export const CIVIC_LAYER_KEYS = ['civic_alpr', 'civic_datacenters', 'civic_projects'] as const;
 export type CivicLayerKey = (typeof CIVIC_LAYER_KEYS)[number];
@@ -210,4 +211,117 @@ export function buildCivicProjectsGeoJSON(
     })),
   });
   return { type: 'FeatureCollection', features: feature ? [feature] : [] };
+}
+
+// ─── Area selection: one circle zoomed in, whole states zoomed out ──────────
+//
+// The upstream answers a lat/lng circle of at most 50 km, OR a whole state
+// (`state=XX`; routers/civic_layers.py). A view wider than the circle used to
+// get only the 50 km around its centre — zoomed out on the US that is almost
+// nothing. Now it gets every state the view touches, nearest first, capped.
+
+export const CIVIC_MAX_STATES = 6;
+
+export type CivicArea =
+  | { kind: 'circle'; query: CivicQuery; label: string }
+  | { kind: 'states'; states: string[]; skipped: string[]; label: string };
+
+/** Half the view's diagonal in km, uncapped. */
+export function viewRadiusKm(bounds: LiveDataBounds): number {
+  const { south, west, north, east } = bounds;
+  const lat = (south + north) / 2;
+  let lngSpan = east - west;
+  if (lngSpan < 0) lngSpan += 360;
+  const h = Math.abs(north - south) * 111;
+  const w = lngSpan * 111 * Math.max(0.05, Math.cos((lat * Math.PI) / 180));
+  return Math.sqrt(h * h + w * w) / 2;
+}
+
+function circleArea(q: CivicQuery): CivicArea {
+  return { kind: 'circle', query: q, label: `${q.radius_km} km around ${q.lat.toFixed(2)}, ${q.lng.toFixed(2)}` };
+}
+
+export function civicAreaFromBounds(bounds: LiveDataBounds | null | undefined, maxStates = CIVIC_MAX_STATES): CivicArea {
+  const q = civicQueryFromBounds(bounds);
+  if (!bounds || ![bounds.south, bounds.west, bounds.north, bounds.east].every(finite)) return circleArea(q);
+  if (viewRadiusKm(bounds) <= CIVIC_MAX_RADIUS_KM) return circleArea(q);
+  const all = statesIntersectingBounds(bounds);
+  // Open ocean / outside the US: the circle is still the honest answer.
+  if (!all.length) return circleArea(q);
+  const states = all.slice(0, maxStates);
+  const skipped = all.slice(maxStates);
+  const label = `${states.join(', ')} (state-wide)${skipped.length ? ` · ${skipped.length} more states in view not loaded — zoom in` : ''}`;
+  return { kind: 'states', states, skipped, label };
+}
+
+export function civicAreaKey(area: CivicArea): string {
+  return area.kind === 'circle' ? `c:${civicQueryKey(area.query)}` : `s:${area.states.join(',')}`;
+}
+
+export type CivicAreaRequest = {
+  url: string;
+  /** Where a per-area pin (federal projects) is anchored. */
+  anchor: CivicQuery;
+};
+
+/** The upstream requests that cover an area for one layer. */
+export function civicAreaRequests(layer: CivicLayerKey, area: CivicArea): CivicAreaRequest[] {
+  if (area.kind === 'circle') return [{ url: civicLayerUrl(layer, area.query), anchor: area.query }];
+  const path = layer === 'civic_alpr' ? 'alpr' : layer === 'civic_datacenters' ? 'datacenters' : 'projects';
+  const out: CivicAreaRequest[] = [];
+  for (const st of area.states) {
+    const c = stateCenter(st);
+    if (!c) continue;
+    const params = new URLSearchParams({ state: st });
+    if (layer !== 'civic_projects') params.set('format', 'geojson');
+    if (layer === 'civic_datacenters') params.set('leads', '0');
+    out.push({
+      url: `/api/civic-proxy/${path}?${params.toString()}`,
+      anchor: { lat: Math.round(c.lat * 1000) / 1000, lng: Math.round(c.lng * 1000) / 1000, radius_km: 0 },
+    });
+  }
+  return out;
+}
+
+/** Concatenate per-area point collections; re-issue ids so they stay unique across areas. */
+export function mergeCivicPoints(
+  parts: Array<GeoJSON.FeatureCollection<GeoJSON.Point> | null>,
+  entityType: string,
+  limit = 30000,
+): GeoJSON.FeatureCollection<GeoJSON.Point> | null {
+  const present = parts.filter((p): p is GeoJSON.FeatureCollection<GeoJSON.Point> => !!p);
+  if (!present.length) return null;
+  const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
+  for (const fc of present) {
+    for (const f of fc.features) {
+      if (features.length >= limit) break;
+      features.push({ ...f, properties: { ...(f.properties ?? {}), id: `${entityType}-${features.length}` } });
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+/** Upstream says it cut a layer at its per-answer cap (surveillance.MAX_FEATURES). */
+export function civicAnswerTruncated(raw: unknown): { truncated: boolean; count: number | null } {
+  const meta = (raw as { metadata?: { features_truncated?: unknown; count?: unknown } } | null)?.metadata;
+  return {
+    truncated: meta?.features_truncated === true,
+    count: typeof meta?.count === 'number' ? meta.count : null,
+  };
+}
+
+// ─── Coverage badge store ───────────────────────────────────────────────────
+
+export const CIVIC_COVERAGE_EVENT = 'sb:civic-coverage';
+export type CivicCoverage = { points: string | null; boundaries: string | null };
+let coverage: CivicCoverage = { points: null, boundaries: null };
+
+export function getCivicCoverage(): CivicCoverage {
+  return coverage;
+}
+
+export function setCivicCoverage(part: keyof CivicCoverage, label: string | null): void {
+  if (coverage[part] === label) return;
+  coverage = { ...coverage, [part]: label };
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(CIVIC_COVERAGE_EVENT));
 }

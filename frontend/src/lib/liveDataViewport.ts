@@ -95,3 +95,77 @@ export function appendLiveDataBoundsParams(url: string): string {
   const e = Math.ceil(b.east);
   return `${url}${sep}s=${s}&w=${w}&n=${n}&e=${e}`;
 }
+
+// ─── The VISIBLE viewport ───────────────────────────────────────────────────
+//
+// `_current` above is the PRELOAD window: the view expanded to a 3,000-mile
+// radius and coarsened (viewportPrivacy), so it barely moves when the operator
+// zooms. Area-scoped feeds that must follow what is actually on screen (the
+// civic layers: a 50 km circle when zoomed in, per-state when zoomed out) read
+// this instead. It is never sent to the backend.
+
+let _visible: LiveDataBounds | null = null;
+
+export function setVisibleViewBounds(bounds: LiveDataBounds | null): void {
+  if (
+    !bounds ||
+    ![bounds.south, bounds.west, bounds.north, bounds.east].every((n) => Number.isFinite(n))
+  ) {
+    _visible = null;
+    return;
+  }
+  _visible = { ...bounds };
+}
+
+/** What is on screen now, or null before the map has reported a view. */
+export function getVisibleViewBounds(): LiveDataBounds | null {
+  return _visible;
+}
+
+function spanOf(b: LiveDataBounds): { lat: number; lng: number } {
+  let lng = b.east - b.west;
+  if (lng < 0) lng += 360;
+  return { lat: Math.max(1e-6, Math.abs(b.north - b.south)), lng: Math.max(1e-6, lng) };
+}
+
+/**
+ * Did the visible view change enough that area-scoped feeds should refetch?
+ * Relative, not absolute: a zoom from the whole US to one city keeps the
+ * preload window nearly identical, but here the span shrinks 50x.
+ */
+export function visibleViewChanged(a: LiveDataBounds | null, b: LiveDataBounds): boolean {
+  if (!a) return true;
+  const sa = spanOf(a);
+  const sb = spanOf(b);
+  const zoomRatio = Math.max(sa.lat / sb.lat, sb.lat / sa.lat);
+  if (zoomRatio > 1.5) return true;
+  const dLat = Math.abs((a.north + a.south) / 2 - (b.north + b.south) / 2);
+  let dLng = Math.abs((a.west + sa.lng / 2) - (b.west + sb.lng / 2));
+  if (dLng > 180) dLng = 360 - dLng;
+  return dLat > sb.lat * 0.25 || dLng > sb.lng * 0.25;
+}
+
+/**
+ * Approximate on-screen bounds for a camera target (web mercator: at zoom z a
+ * 512-px tile spans 360/2^z degrees of longitude). Used to announce a fly-to
+ * destination immediately, so area-scoped feeds do not wait on `moveend` —
+ * which a headless or backgrounded renderer may never deliver.
+ */
+export function estimateViewBounds(
+  lat: number,
+  lng: number,
+  zoom: number,
+  widthPx = 1280,
+  heightPx = 800,
+): LiveDataBounds {
+  const z = Number.isFinite(zoom) ? Math.max(0, Math.min(22, zoom)) : 8;
+  const degPerPx = 360 / (512 * 2 ** z);
+  const halfLng = Math.min(180, (widthPx / 2) * degPerPx);
+  const halfLat = Math.min(85, (heightPx / 2) * degPerPx * Math.max(0.05, Math.cos((lat * Math.PI) / 180)));
+  return {
+    south: Math.max(-90, lat - halfLat),
+    north: Math.min(90, lat + halfLat),
+    west: Math.max(-180, lng - halfLng),
+    east: Math.min(180, lng + halfLng),
+  };
+}

@@ -14,8 +14,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ActiveLayers } from '@/types/dashboard';
-import { getLiveDataBounds } from '@/lib/liveDataViewport';
-import { VIEWPORT_COMMITTED_EVENT } from '@/components/map/hooks/useViewportBounds';
+import { getVisibleViewBounds } from '@/lib/liveDataViewport';
+import { VIEWPORT_COMMITTED_EVENT, VISIBLE_VIEW_EVENT } from '@/components/map/hooks/useViewportBounds';
+import { setCivicCoverage } from '@/lib/civicLayers';
 import {
   CIVIC_BOUNDARY_TOGGLES,
   CIVIC_BOUNDARY_TOGGLE_KEYS,
@@ -64,7 +65,9 @@ async function loadLayer(layer: CivicBoundaryLayer, state: string, signal: Abort
 }
 
 function viewStates(): { states: string[]; note: string | null } {
-  const b = getLiveDataBounds();
+  // The VISIBLE view: the live-data preload window is padded to a 3,000-mile
+  // radius and would always read as "zoomed out".
+  const b = getVisibleViewBounds();
   if (!b) return { states: [], note: null };
   if (Math.abs(b.north - b.south) > CIVIC_BOUNDARY_MAX_LAT_SPAN) {
     return { states: [], note: 'Zoom in to a state to draw district lines.' };
@@ -87,6 +90,7 @@ export function useCivicBoundaries(activeLayers: Pick<ActiveLayers, CivicBoundar
     if (!enabledKey) {
       keyRef.current = null;
       setState(EMPTY);
+      setCivicCoverage('boundaries', null);
       return;
     }
     const toggles = enabledKey.split(',') as CivicBoundaryToggle[];
@@ -102,8 +106,10 @@ export function useCivicBoundaries(activeLayers: Pick<ActiveLayers, CivicBoundar
       controller?.abort();
       if (!states.length) {
         setState({ ...EMPTY, note });
+        setCivicCoverage('boundaries', note);
         return;
       }
+      setCivicCoverage('boundaries', `${states.join(', ')} · loading…`);
       controller = new AbortController();
       const signal = controller.signal;
       setState((prev) => ({ ...prev, states, loading: true, note: null }));
@@ -132,6 +138,10 @@ export function useCivicBoundaries(activeLayers: Pick<ActiveLayers, CivicBoundar
           loading: false,
           note: !drawn && failed ? 'Civic boundary service unavailable; retrying on the next move.' : null,
         });
+        setCivicCoverage(
+          'boundaries',
+          drawn ? `${states.join(', ')}${failed ? ` · ${failed} layer(s) unavailable` : ''}` : `${states.join(', ')} · unavailable`,
+        );
         // Let a later viewport event retry what failed instead of pinning the miss.
         if (failed && !drawn) keyRef.current = null;
       });
@@ -144,11 +154,13 @@ export function useCivicBoundaries(activeLayers: Pick<ActiveLayers, CivicBoundar
 
     load();
     window.addEventListener(VIEWPORT_COMMITTED_EVENT, onViewport);
+    window.addEventListener(VISIBLE_VIEW_EVENT, onViewport);
     return () => {
       cancelled = true;
       controller?.abort();
       if (debounce) clearTimeout(debounce);
       window.removeEventListener(VIEWPORT_COMMITTED_EVENT, onViewport);
+      window.removeEventListener(VISIBLE_VIEW_EVENT, onViewport);
     };
   }, [enabledKey]);
 

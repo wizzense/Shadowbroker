@@ -48,6 +48,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import RoadCorridorLayerControls from '@/components/RoadCorridorLayerControls';
+import CivicCoverageBadge from '@/components/CivicCoverageBadge';
 import { API_BASE } from '@/lib/api';
 import { useLiveUamapScraperOptIn } from '@/hooks/useLiveUamapScraperOptIn';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -1886,6 +1887,7 @@ const WorldviewLeftPanel = React.memo(function WorldviewLeftPanel({
                   </div>
                 )}
 
+                <CivicCoverageBadge />
                 {sections.map((section) => {
                   const SectionIcon = section.icon;
                   const sectionLayerIds = section.layers.map((l) => l.id);

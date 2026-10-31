@@ -26,6 +26,8 @@ describe('civic proxy allowlist', () => {
     expect(r.route.upstreamPath).toBe('/layers/alpr');
     expect(r.route.query).toBe('lat=34&lng=-118&radius_km=50&format=geojson');
     expect(resolveCivicProxyRequest(['alpr'], qs('format=geojson'))).toMatchObject({ ok: false, status: 422 });
+    const proj = resolveCivicProxyRequest(['projects'], qs('state=IN'));
+    expect(proj.ok && proj.route.timeoutMs).toBeGreaterThan(45000);
   });
 
   it('refuses unknown routes, extra segments and traversal', () => {
