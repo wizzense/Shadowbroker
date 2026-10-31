@@ -11,6 +11,7 @@ import {
   civicLookupUrl,
   civicUnitsUrl,
 } from '@/lib/civicDirectory';
+import { CANDIDATE_ID, candidatePageUrl, federalCandidatesUrl, fecOfficeFor, type FecOffice } from '@/lib/civicCandidates';
 import { clampLimit, DEFAULT_LIST, redactDeep, trimEntity } from './bound';
 import {
   DATA_LAYERS,
@@ -509,6 +510,88 @@ const getLocalGovernments: ToolDefinition = {
   },
 };
 
+// ─── Candidates (served by this app: /api/civic-candidates) ──────────────────
+
+/** "house" / "U.S. Senate" / "H" → FEC office code; unknown → null. */
+function candidateOffice(v: unknown): FecOffice | null {
+  const raw = String(v ?? '').trim();
+  if (/^[HSP]$/i.test(raw)) return raw.toUpperCase() as FecOffice;
+  return fecOfficeFor(raw);
+}
+
+const getCandidates: ToolDefinition = {
+  name: 'get_candidates',
+  description:
+    "Federal candidates (U.S. House, U.S. Senate) registered with the FEC for a state's current election cycle: name, party, incumbent/challenger/open seat, money raised/spent, candidate_id. FEC registration is not ballot status (primary losers appear). State and local candidates are not available from this tool. Pass a candidate_id to get_candidate_page for their platform.",
+  inputSchema: {
+    type: 'object',
+    properties: {
+      state: STATE_ARG,
+      office: { type: 'string', description: 'Optional: "house" or "senate" (default: both).' },
+      district: { type: 'string', description: 'Optional US House district number, e.g. "1".' },
+      limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max candidates per race (default 15).' },
+    },
+    required: ['state'],
+  },
+  readOnly: true,
+  async execute(args, ctx, signal) {
+    const state = resolveStateCode(args.state);
+    const district = typeof args.district === 'string' || typeof args.district === 'number' ? String(args.district).trim() : '';
+    if (district && !/^\d{1,2}$/.test(district)) throw new Error('district must be a number like "1"');
+    const office = args.office === undefined || args.office === '' ? null : candidateOffice(args.office);
+    if (args.office !== undefined && args.office !== '' && !office) throw new Error('office must be "house" or "senate"');
+    const offices: FecOffice[] = office ? [office] : district ? ['H'] : ['H', 'S'];
+    const limit = Math.min(50, clampLimit(args.limit, 15));
+    const races = await Promise.all(
+      offices.map(async (o) => {
+        try {
+          const body = (await ctx.fetchJson(federalCandidatesUrl(state, o, o === 'H' ? district : ''), signal)) as Record<string, unknown>;
+          const cands = Array.isArray(body?.candidates) ? (body.candidates as Array<Record<string, unknown>>) : [];
+          return {
+            office: o === 'H' ? 'U.S. House' : o === 'S' ? 'U.S. Senate' : 'President',
+            district: o === 'H' ? district || 'all districts' : '',
+            total: cands.length,
+            candidates: cands.slice(0, limit).map((c) => ({
+              candidate_id: c.id,
+              name: c.name,
+              party: c.party,
+              status: c.status,
+              district: c.district,
+              money: c.money,
+              has_campaign_site: c.has_campaign_site,
+              fec_url: Array.isArray(c.links) ? (c.links as Array<Record<string, unknown>>).find((l) => l.kind === 'fec')?.url : undefined,
+            })),
+            notes: body?.notes,
+            source: body?.source,
+          };
+        } catch (e) {
+          return { office: o, error: String((e as Error)?.message ?? e) };
+        }
+      }),
+    );
+    return { state, races, state_local: 'State and local candidate lists are not available from this tool.' };
+  },
+};
+
+const getCandidatePage: ToolDefinition = {
+  name: 'get_candidate_page',
+  description:
+    "Read a candidate's OWN campaign website (the URL in their FEC committee record) as a text excerpt: title, headings, issue-page links and body text. Use it to describe a candidate's platform and policy positions, and cite the returned final_url. It reads only that one page; positions are the campaign's own claims.",
+  inputSchema: {
+    type: 'object',
+    properties: {
+      candidate_id: { type: 'string', description: 'candidate_id from get_candidates, e.g. "fec:H6OH01195".' },
+    },
+    required: ['candidate_id'],
+  },
+  readOnly: true,
+  async execute(args, ctx, signal) {
+    const id = String(args.candidate_id ?? '').trim();
+    if (!CANDIDATE_ID.test(id)) throw new Error('candidate_id must come from get_candidates (e.g. "fec:H6OH01195")');
+    return redactDeep(await ctx.fetchJson(candidatePageUrl(id), signal));
+  },
+};
+
 /** The full tool set, in the order a model should consider them. */
 export function createShadowbrokerTools(): ToolDefinition[] {
   return [
@@ -522,6 +605,8 @@ export function createShadowbrokerTools(): ToolDefinition[] {
     getElections,
     getOfficialsAt,
     getLocalGovernments,
+    getCandidates,
+    getCandidatePage,
     flyTo,
     showEntity,
     toggleLayer,

@@ -27,6 +27,7 @@ import EntityGraphPanel from '@/components/EntityGraphPanel';
 import { isEntityGraphEligible } from '@/lib/entityGraph';
 import AIIntelPanel from '@/components/AIIntelPanel';
 import AgentChatPanel from '@/components/AgentChatPanel';
+import AgentPromptOpener from '@/components/panels/AgentPromptOpener';
 import GlobalTicker from '@/components/GlobalTicker';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import OnboardingModal, { useOnboarding } from '@/components/OnboardingModal';
@@ -1170,6 +1171,7 @@ function DashboardInner() {
         {/* AGENT CHAT — prompts the board through the WebMCP tool registry */}
         {secondaryBootReady && (
           <ErrorBoundary name="AgentChat">
+            <AgentPromptOpener />
             <FloatingPanel
               id="agent-chat"
               title="AGENT CHAT — ASK THE MAP"

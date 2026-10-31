@@ -12,6 +12,7 @@
  * read-only except map-view actions; credentials stay in sessionStorage.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AGENT_PROMPT_EVENT, consumeAgentPrompt } from '@/lib/agentChat/prompt';
 import { Bot, ChevronDown, ChevronRight, Loader2, Send, Settings2, Square, X } from 'lucide-react';
 import { readDataStore } from '@/hooks/useDataStore';
 import { getLiveDataBounds } from '@/lib/liveDataViewport';
@@ -178,6 +179,20 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers,
   }, [bonsai]);
 
   useEffect(() => savePrefs(prefs), [prefs]);
+
+  // Prompts handed over from elsewhere on the board (CIVIC candidate card):
+  // prefill, open, never auto-send.
+  useEffect(() => {
+    const take = () => {
+      const text = consumeAgentPrompt();
+      if (!text) return;
+      setInput(text);
+      setOpen(true);
+    };
+    take();
+    window.addEventListener(AGENT_PROMPT_EVENT, take);
+    return () => window.removeEventListener(AGENT_PROMPT_EVENT, take);
+  }, []);
   useEffect(() => setSecretDraft(getSecret(prefs.backend)), [prefs.backend]);
 
   const probe = useCallback(

@@ -16,6 +16,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, Landmark, LocateFixed, Minus, Plus, RefreshCw } from 'lucide-react';
 import { getVisibleViewBounds } from '@/lib/liveDataViewport';
+import { ElectionCandidates, StateLocalBallot } from '@/components/CivicCandidates';
 import {
   CIVIC_LOOKUP_EVENT,
   civicElectionsUrl,
@@ -282,11 +283,17 @@ export default function CivicPanel({ layerEnabled = false }: Props) {
                   <div className="text-[10px] font-mono text-violet-500/80">None listed in the source.</div>
                 )}
                 {data?.elections?.elections.map((e, i) => (
-                  <div key={e.id || i} className="text-[10px] font-mono text-violet-200 mt-0.5">
-                    {e.date} · {e.office || 'Election'}
-                    {e.district ? ` (District ${e.district})` : ''} · {e.type || ''}
-                  </div>
+                  <ElectionCandidates
+                    key={e.id || i}
+                    election={e}
+                    state={lookup.state || ''}
+                    district={lookupCongressionalDistrict(lookup)}
+                  />
                 ))}
+                {data?.elections && data.elections.elections.length > 0 && (
+                  <div className="text-[9px] font-mono text-violet-500/80 mt-0.5">Click a race to see its candidates.</div>
+                )}
+                <StateLocalBallot />
                 {data?.elections?.coverage_note && (
                   <div className="text-[9px] font-mono text-violet-500/80 mt-0.5">{data.elections.coverage_note}</div>
                 )}
