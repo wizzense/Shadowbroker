@@ -42,6 +42,8 @@ import {
 import type { ActiveLayers } from '@/types/dashboard';
 
 export interface AgentChatPanelProps {
+  /** Rendered inside a FloatingPanel: fill the shell, always open, no fixed positioning. */
+  embedded?: boolean;
   onFlyTo: (lat: number, lng: number, zoom?: number) => void;
   activeLayers: ActiveLayers;
   setActiveLayers: React.Dispatch<React.SetStateAction<ActiveLayers>>;
@@ -107,7 +109,7 @@ function AssistantText({ text }: { text: string }) {
   );
 }
 
-export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers }: AgentChatPanelProps) {
+export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers, embedded = false }: AgentChatPanelProps) {
   const [open, setOpen] = useState(false);
   const [prefs, setPrefs] = useState<AgentPrefs>(() => loadPrefs());
   const [health, setHealth] = useState<Partial<Record<AdapterId, AdapterHealth>>>({});
@@ -276,7 +278,7 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers 
     }
   };
 
-  if (!open) {
+  if (!open && !embedded) {
     return (
       <button
         type="button"
@@ -291,7 +293,13 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers 
 
   const h = health[prefs.backend];
   return (
-    <div className="fixed bottom-4 right-4 z-[300] pointer-events-auto w-[380px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-6rem)] flex flex-col rounded border border-cyan-800/60 bg-black/90 backdrop-blur text-[11px] font-mono shadow-xl">
+    <div
+      className={
+        embedded
+          ? 'w-full h-full min-h-[360px] flex flex-col bg-black/90 text-[11px] font-mono'
+          : 'fixed bottom-4 right-4 z-[300] pointer-events-auto w-[380px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-6rem)] flex flex-col rounded border border-cyan-800/60 bg-black/90 backdrop-blur text-[11px] font-mono shadow-xl'
+      }
+    >
       <div className="flex items-center justify-between px-3 py-2 border-b border-cyan-900/60">
         <div className="flex items-center gap-2 text-cyan-400 tracking-widest">
           <Bot size={12} /> AGENT CHAT
@@ -303,9 +311,11 @@ export default function AgentChatPanel({ onFlyTo, activeLayers, setActiveLayers 
           <button type="button" aria-label="settings" onClick={() => setShowSettings((s) => !s)} className="text-gray-400 hover:text-cyan-300">
             <Settings2 size={12} />
           </button>
-          <button type="button" aria-label="close" onClick={() => setOpen(false)} className="text-gray-400 hover:text-cyan-300">
+          {!embedded && (
+            <button type="button" aria-label="close" onClick={() => setOpen(false)} className="text-gray-400 hover:text-cyan-300">
             <X size={12} />
           </button>
+          )}
         </div>
       </div>
 

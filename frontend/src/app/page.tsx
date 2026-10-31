@@ -1167,11 +1167,20 @@ function DashboardInner() {
         {/* AGENT CHAT — prompts the board through the WebMCP tool registry */}
         {secondaryBootReady && (
           <ErrorBoundary name="AgentChat">
-            <AgentChatPanel
-              onFlyTo={(lat, lng, zoom) => setFlyToLocation({ lat, lng, zoom, ts: Date.now() })}
-              activeLayers={activeLayers}
-              setActiveLayers={setActiveLayers}
-            />
+            <FloatingPanel
+              id="agent-chat"
+              title="AGENT CHAT — ASK THE MAP"
+              defaultDock={null}
+              order={5}
+              defaultRect={(vp) => ({ x: Math.max(16, vp.width - 860), y: Math.max(80, vp.height - 640), w: 420, h: 580 })}
+            >
+              <AgentChatPanel
+                embedded
+                onFlyTo={(lat, lng, zoom) => setFlyToLocation({ lat, lng, zoom, ts: Date.now() })}
+                activeLayers={activeLayers}
+                setActiveLayers={setActiveLayers}
+              />
+            </FloatingPanel>
           </ErrorBoundary>
         )}
       </main>
