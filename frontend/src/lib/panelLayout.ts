@@ -59,6 +59,12 @@ export interface PanelState {
   poppedOut: boolean;
   /** Stacking order among floating panels; higher = in front. */
   z: number;
+  /** Floating height follows content (capped) until the user resizes it. */
+  autoHeight: boolean;
+  /** Filling the free map area; restoreRect (or the dock) is where it returns. */
+  maximized: boolean;
+  /** Rect to restore on un-maximize; null + maximized = return to the dock. */
+  restoreRect: Rect | null;
 }
 
 export interface DockState {
@@ -77,8 +83,16 @@ export const MIN_DOCK_WIDTH = 260;
 export const MAX_DOCK_WIDTH = 900;
 export const DEFAULT_MIN_WIDTH = 240;
 export const DEFAULT_MIN_HEIGHT = 120;
-/** Pixels of a floating panel that must stay on screen on every side. */
+/** Height of the panel title bar (px). */
 export const HEADER_HEIGHT = 22;
+/** Snap distance for edges (viewport and other panels). */
+export const SNAP_THRESHOLD = 12;
+/** First-float auto height never exceeds this fraction of the viewport. */
+export const MAX_AUTO_HEIGHT_FRACTION = 0.85;
+/** Offset between cascaded floats. */
+export const CASCADE_STEP = 32;
+/** Space kept clear of the brand header (top) and the ticker/coords bar (bottom). */
+export const FREE_AREA_MARGINS = { top: 96, bottom: 48, gap: 16 };
 
 export function createDefaultLayout(): PanelLayout {
   return {
@@ -182,6 +196,9 @@ export function resolvePanelState(layout: PanelLayout, def: PanelDefinition): Pa
     closed: stored.closed ?? false,
     poppedOut: stored.poppedOut ?? false,
     z: stored.z ?? 0,
+    autoHeight: stored.autoHeight ?? false,
+    maximized: stored.maximized ?? false,
+    restoreRect: stored.restoreRect ?? null,
   };
 }
 
@@ -229,6 +246,8 @@ export function dockPanel(layout: PanelLayout, def: PanelDefinition): PanelLayou
     minimized: false,
     closed: false,
     poppedOut: false,
+    maximized: false,
+    restoreRect: null,
   });
 }
 
@@ -238,6 +257,227 @@ export function floatPanel(layout: PanelLayout, id: string, rect: Rect): PanelLa
 
 export function setDockWidth(layout: PanelLayout, side: DockSide, width: number, vp?: Viewport): PanelLayout {
   return { ...layout, docks: { ...layout.docks, [side]: { width: clampDockWidth(width, vp) } } };
+}
+
+// ── Free-area placement, cascade, tile ────────────────────────────────────
+
+function intersects(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/**
+ * The part of the viewport not covered by the dock columns (obstacles) and
+ * the header/footer bands: where new floats go so they never hide a docked
+ * panel. Obstacles left of centre push the left bound, others the right
+ * bound; off-screen obstacles (a slid-away dock) are ignored. Falls back to
+ * the whole viewport (minus margins) when the strip is narrower than minWidth.
+ */
+export function computeFreeArea(vp: Viewport, obstacles: Rect[], minWidth = DEFAULT_MIN_WIDTH): Rect {
+  const { top, bottom, gap } = FREE_AREA_MARGINS;
+  const screen: Rect = { x: 0, y: 0, w: vp.width, h: vp.height };
+  let left = gap;
+  let right = vp.width - gap;
+  for (const o of obstacles) {
+    if (o.w <= 0 || o.h <= 0 || !intersects(o, screen)) continue;
+    const cx = o.x + o.w / 2;
+    if (cx < vp.width / 2) left = Math.max(left, o.x + o.w + gap);
+    else right = Math.min(right, o.x - gap);
+  }
+  const y = Math.min(top, Math.max(0, vp.height - DEFAULT_MIN_HEIGHT));
+  const h = Math.max(DEFAULT_MIN_HEIGHT, vp.height - y - bottom);
+  if (right - left < Math.min(minWidth, vp.width - 2 * gap)) {
+    return { x: gap, y, w: Math.max(0, vp.width - 2 * gap), h };
+  }
+  return { x: Math.round(left), y, w: Math.round(right - left), h };
+}
+
+/** Fit a size inside an area: never larger than the area, never below the minimums. */
+function fitSize(size: { w: number; h: number }, area: Rect, min: { minWidth?: number; minHeight?: number }) {
+  return {
+    w: Math.round(Math.max(Math.min(size.w, area.w), Math.min(min.minWidth ?? DEFAULT_MIN_WIDTH, area.w))),
+    h: Math.round(Math.max(Math.min(size.h, area.h), Math.min(min.minHeight ?? DEFAULT_MIN_HEIGHT, area.h))),
+  };
+}
+
+function cascadeSlots(free: Rect, w: number, h: number, step: number): number {
+  return Math.max(1, Math.floor(Math.min(free.w - w, free.h - h) / step) + 1);
+}
+
+/** True when `r` covers any part of any obstacle. */
+export function overlapsAny(r: Rect, obstacles: Rect[]): boolean {
+  return obstacles.some((o) => intersects(r, o));
+}
+
+/**
+ * Where a newly floated panel goes, inside the free area (never over a dock):
+ * 1. the top-most, then left-most spot that overlaps NO existing float
+ *    (candidates: the free area's corner, right of / below each float);
+ * 2. otherwise the first cascade slot whose top-left is not already taken,
+ *    so repeated undocks fan out instead of stacking exactly.
+ */
+export function placeNewFloat(
+  size: { w: number; h: number },
+  free: Rect,
+  existing: Rect[],
+  min: { minWidth?: number; minHeight?: number } = {},
+  step = CASCADE_STEP,
+): Rect {
+  const { w, h } = fitSize(size, free, min);
+  const gap = 8;
+  const xs = [free.x, ...existing.map((o) => o.x + o.w + gap)];
+  const ys = [free.y, ...existing.map((o) => o.y + o.h + gap)];
+  const candidates: Rect[] = [];
+  for (const y of ys) {
+    for (const x of xs) {
+      const r = { x, y, w, h };
+      if (x < free.x || y < free.y || x + w > free.x + free.w || y + h > free.y + free.h) continue;
+      if (!overlapsAny(r, existing)) candidates.push(r);
+    }
+  }
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => a.y - b.y || a.x - b.x);
+    return candidates[0];
+  }
+  const slots = cascadeSlots(free, w, h, step);
+  const taken = (x: number, y: number) =>
+    existing.some((r) => Math.abs(r.x - x) < step / 2 && Math.abs(r.y - y) < step / 2);
+  for (let k = 0; k < slots; k++) {
+    const x = free.x + k * step;
+    const y = free.y + k * step;
+    if (!taken(x, y)) return { x, y, w, h };
+  }
+  return { x: free.x, y: free.y, w, h };
+}
+
+/** Cascade: each float keeps its (fitted) size, offset diagonally from the free area's corner. */
+export function cascadeRects(sizes: { w: number; h: number }[], free: Rect, step = CASCADE_STEP): Rect[] {
+  return sizes.map((size, i) => {
+    const { w, h } = fitSize(size, free, {});
+    const k = i % cascadeSlots(free, w, h, step);
+    return { x: free.x + k * step, y: free.y + k * step, w, h };
+  });
+}
+
+/** Tile: an even grid over the free area (column count follows its aspect), with a gap. */
+export function tileRects(count: number, free: Rect, gap = 8): Rect[] {
+  if (count <= 0) return [];
+  const aspect = free.w / Math.max(free.h, 1);
+  const cols = Math.max(1, Math.min(count, Math.round(Math.sqrt(count * aspect)) || 1));
+  const rows = Math.ceil(count / cols);
+  const cw = (free.w - gap * (cols - 1)) / cols;
+  const rh = (free.h - gap * (rows - 1)) / rows;
+  const out: Rect[] = [];
+  for (let i = 0; i < count; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    out.push({
+      x: Math.round(free.x + col * (cw + gap)),
+      y: Math.round(free.y + row * (rh + gap)),
+      w: Math.round(cw),
+      h: Math.round(rh),
+    });
+  }
+  return out;
+}
+
+// ── Snapping ───────────────────────────────────────────────────────────────
+
+function nearest(value: number, targets: number[], threshold: number): number {
+  let best = value;
+  let bestD = Infinity;
+  for (const t of targets) {
+    const d = Math.abs(t - value);
+    if (d <= threshold && d < bestD) {
+      best = t;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+function rangesNear(a0: number, a1: number, b0: number, b1: number, t: number): boolean {
+  return a0 <= b1 + t && b0 <= a1 + t;
+}
+
+/**
+ * Snap a moving rect to the viewport edges and to other panels' edges within
+ * `threshold` px. Panels only attract along an axis when they are beside each
+ * other on the other axis (no long-distance alignment jumps).
+ */
+export function snapMove(rect: Rect, vp: Viewport, others: Rect[], threshold = SNAP_THRESHOLD): Rect {
+  const xs: number[] = [0, vp.width - rect.w];
+  const ys: number[] = [0, vp.height - rect.h];
+  for (const o of others) {
+    if (rangesNear(rect.y, rect.y + rect.h, o.y, o.y + o.h, threshold)) {
+      xs.push(o.x + o.w, o.x - rect.w, o.x, o.x + o.w - rect.w);
+    }
+    if (rangesNear(rect.x, rect.x + rect.w, o.x, o.x + o.w, threshold)) {
+      ys.push(o.y + o.h, o.y - rect.h, o.y, o.y + o.h - rect.h);
+    }
+  }
+  return { ...rect, x: nearest(rect.x, xs, threshold), y: nearest(rect.y, ys, threshold) };
+}
+
+/** Snap only the edges a resize is moving; never produces a rect below the minimums. */
+export function snapResize(
+  rect: Rect,
+  dir: ResizeDir,
+  vp: Viewport,
+  others: Rect[],
+  min: { minWidth?: number; minHeight?: number } = {},
+  threshold = SNAP_THRESHOLD,
+): Rect {
+  let left = rect.x;
+  let top = rect.y;
+  let right = rect.x + rect.w;
+  let bottom = rect.y + rect.h;
+  const xEdges = [0, vp.width];
+  const yEdges = [0, vp.height];
+  for (const o of others) {
+    if (rangesNear(top, bottom, o.y, o.y + o.h, threshold)) xEdges.push(o.x, o.x + o.w);
+    if (rangesNear(left, right, o.x, o.x + o.w, threshold)) yEdges.push(o.y, o.y + o.h);
+  }
+  if (dir.includes('e')) right = nearest(right, xEdges, threshold);
+  if (dir.includes('w')) left = nearest(left, xEdges, threshold);
+  if (dir.includes('s')) bottom = nearest(bottom, yEdges, threshold);
+  if (dir.includes('n')) top = nearest(top, yEdges, threshold);
+  if (right - left < Math.min(min.minWidth ?? DEFAULT_MIN_WIDTH, vp.width)) return rect;
+  if (bottom - top < Math.min(min.minHeight ?? DEFAULT_MIN_HEIGHT, vp.height)) return rect;
+  return { x: left, y: top, w: right - left, h: bottom - top };
+}
+
+// ── Maximize / restore ─────────────────────────────────────────────────────
+
+/**
+ * Maximize a panel into the free area. `current` is its on-screen rect,
+ * restored later; fromDock=true means restore puts it back in its dock.
+ */
+export function maximizePanel(
+  layout: PanelLayout,
+  id: string,
+  free: Rect,
+  current: Rect,
+  fromDock: boolean,
+): PanelLayout {
+  return bringToFront(
+    patchPanel(layout, id, {
+      mode: 'floating',
+      rect: { ...free },
+      maximized: true,
+      restoreRect: fromDock ? null : { ...current },
+      autoHeight: false,
+      minimized: false,
+    }),
+    id,
+  );
+}
+
+/** Undo maximizePanel: back to the remembered rect, or to the dock. */
+export function restorePanel(layout: PanelLayout, def: PanelDefinition): PanelLayout {
+  const s = resolvePanelState(layout, def);
+  if (!s.maximized) return layout;
+  if (!s.restoreRect) return dockPanel(layout, def);
+  return patchPanel(layout, def.id, { rect: s.restoreRect, maximized: false, restoreRect: null });
 }
 
 // ── Validation / persistence ────────────────────────────────────────────────
@@ -266,6 +506,10 @@ function sanitizePanel(v: unknown): Partial<PanelState> | null {
   if (typeof p.minimized === 'boolean') out.minimized = p.minimized;
   if (typeof p.closed === 'boolean') out.closed = p.closed;
   if (isFiniteNum(p.z) && p.z >= 0) out.z = Math.floor(p.z);
+  if (typeof p.autoHeight === 'boolean') out.autoHeight = p.autoHeight;
+  if (typeof p.maximized === 'boolean') out.maximized = p.maximized;
+  const restore = sanitizeRect(p.restoreRect);
+  if (restore) out.restoreRect = restore;
   // poppedOut deliberately dropped: a reload cannot reopen the window.
   return out;
 }

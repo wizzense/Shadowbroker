@@ -24,8 +24,14 @@ import React, {
   useState,
 } from 'react';
 import {
+  bringToFront,
   buildPreset,
+  cascadeRects,
   clearPanelLayout,
+  computeFreeArea,
+  patchPanel,
+  resolvePanelState,
+  tileRects,
   createDefaultLayout,
   loadPanelLayout,
   savePanelLayout,
@@ -33,6 +39,7 @@ import {
   type PanelDefinition,
   type PanelLayout,
   type PanelPresetId,
+  type Rect,
   type Viewport,
 } from '@/lib/panelLayout';
 
@@ -49,11 +56,21 @@ export interface PanelWorkspaceValue {
   setFloatEl: (el: HTMLElement | null) => void;
   applyPreset: (id: PanelPresetId) => void;
   resetLayout: () => void;
+  /** Viewport area not covered by the (open) dock columns or header/footer. */
+  measureFreeArea: () => Rect;
+  /** On-screen rects of floating panels (optionally excluding one) and open docks. */
+  measureObstacles: (exceptId?: string) => { floats: Rect[]; docks: Rect[] };
+  /** Rearrange every visible floating panel inside the free area. */
+  arrangeFloats: (kind: 'tile' | 'cascade') => number;
 }
 
 const PanelWorkspaceContext = createContext<PanelWorkspaceValue | null>(null);
 
 const FALLBACK_VIEWPORT: Viewport = { width: 1440, height: 900 };
+
+function toRect(r: DOMRect): Rect {
+  return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+}
 
 function readViewport(): Viewport {
   if (typeof window === 'undefined') return FALLBACK_VIEWPORT;
@@ -123,6 +140,64 @@ export function PanelWorkspaceProvider({ children }: { children: React.ReactNode
     setLayout(createDefaultLayout());
   }, []);
 
+  const dockElsRef = useRef(dockEls);
+  dockElsRef.current = dockEls;
+  const floatElRef = useRef(floatEl);
+  floatElRef.current = floatEl;
+
+  const measureObstacles = useCallback((exceptId?: string) => {
+    const docks: Rect[] = [];
+    for (const el of Object.values(dockElsRef.current)) {
+      if (el) docks.push(toRect(el.getBoundingClientRect()));
+    }
+    const floats: Rect[] = [];
+    floatElRef.current?.querySelectorAll<HTMLElement>('[data-panel-mode="floating"]').forEach((el) => {
+      if (el.dataset.panelId !== exceptId) floats.push(toRect(el.getBoundingClientRect()));
+    });
+    return { floats, docks };
+  }, []);
+
+  const measureFreeArea = useCallback(
+    () => computeFreeArea(readViewport(), measureObstacles().docks),
+    [measureObstacles],
+  );
+
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+
+  const arrangeFloats = useCallback(
+    (kind: 'tile' | 'cascade') => {
+      const free = measureFreeArea();
+      const floating = definitionsRef.current.filter((d) => {
+        const s = resolvePanelState(layoutRef.current, d);
+        return s.mode === 'floating' && !s.closed && !s.poppedOut;
+      });
+      if (floating.length === 0) return 0;
+      const sizes = floating.map((d) => {
+        const el = floatElRef.current?.querySelector<HTMLElement>(`[data-panel-id="${CSS.escape(d.id)}"]`);
+        const r = el?.getBoundingClientRect();
+        return r ? { w: r.width, h: r.height } : { w: 380, h: 480 };
+      });
+      const rects = kind === 'tile' ? tileRects(floating.length, free) : cascadeRects(sizes, free);
+      setLayout((l) => {
+        let next = l;
+        floating.forEach((d, i) => {
+          next = patchPanel(next, d.id, {
+            rect: rects[i],
+            autoHeight: false,
+            maximized: false,
+            restoreRect: null,
+            minimized: false,
+          });
+          next = bringToFront(next, d.id);
+        });
+        return next;
+      });
+      return floating.length;
+    },
+    [measureFreeArea],
+  );
+
   const value = useMemo<PanelWorkspaceValue>(
     () => ({
       layout,
@@ -136,8 +211,25 @@ export function PanelWorkspaceProvider({ children }: { children: React.ReactNode
       setFloatEl,
       applyPreset,
       resetLayout,
+      measureFreeArea,
+      measureObstacles,
+      arrangeFloats,
     }),
-    [layout, viewport, definitions, register, update, dockEls, setDockEl, floatEl, applyPreset, resetLayout],
+    [
+      layout,
+      viewport,
+      definitions,
+      register,
+      update,
+      dockEls,
+      setDockEl,
+      floatEl,
+      applyPreset,
+      resetLayout,
+      measureFreeArea,
+      measureObstacles,
+      arrangeFloats,
+    ],
   );
 
   return <PanelWorkspaceContext.Provider value={value}>{children}</PanelWorkspaceContext.Provider>;
