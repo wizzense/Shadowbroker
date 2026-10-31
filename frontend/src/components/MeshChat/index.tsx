@@ -55,6 +55,7 @@ import { RepBadge } from './RepBadge';
 import { timeAgo } from './utils';
 import { MSG_COLORS } from './types';
 import type { MeshChatProps, Tab } from './types';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 function describeGateCompatConsentPrompt(action: string): string {
   switch (String(action || '')) {
@@ -1234,7 +1235,8 @@ const MeshChat = React.memo(function MeshChat(props: MeshChatProps) {
       </div>
 
       {gatePersonaPromptOpen && (
-        <div className="fixed inset-0 z-[455] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center">
           <div className="w-full max-w-md border border-fuchsia-800/50 bg-[var(--bg-primary)] shadow-[0_0_34px_rgba(236,72,153,0.12)]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-fuchsia-800/40">
               <div>
@@ -1329,10 +1331,12 @@ const MeshChat = React.memo(function MeshChat(props: MeshChatProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {identityWizardOpen && (
-        <div className="fixed inset-0 z-[450] bg-black/75 backdrop-blur-sm p-3 flex items-center justify-center">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[9998] bg-black/75 backdrop-blur-sm p-3 flex items-center justify-center">
           <div className="w-full max-w-md border border-cyan-800/50 bg-[var(--bg-primary)] shadow-[0_0_30px_rgba(0,255,255,0.08)]">
             <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)]/40">
                 <div>
@@ -1470,10 +1474,12 @@ const MeshChat = React.memo(function MeshChat(props: MeshChatProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {infonetUnlockOpen && (
-        <div className="fixed inset-0 z-[460] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center">
           <div className="w-full max-w-xl border border-cyan-800/50 bg-[var(--bg-primary)] shadow-[0_0_34px_rgba(0,255,255,0.1)]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]/40">
               <div>
@@ -1547,10 +1553,12 @@ const MeshChat = React.memo(function MeshChat(props: MeshChatProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {deadDropUnlockOpen && (
-        <div className="fixed inset-0 z-[460] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center">
           <div className="w-full max-w-lg border border-cyan-800/50 bg-[var(--bg-primary)] shadow-[0_0_34px_rgba(0,255,255,0.1)]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]/40">
               <div>
@@ -1616,13 +1624,15 @@ const MeshChat = React.memo(function MeshChat(props: MeshChatProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ─── SENDER POPUP (fixed position) ─── */}
       {senderPopup && (
+        <ModalPortal>
         <div
           ref={popupRef}
-          className="fixed z-[500] bg-[var(--bg-primary)]/95 border border-[var(--border-primary)] shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-sm py-1 min-w-[140px]"
+          className="fixed z-[10000] bg-[var(--bg-primary)]/95 border border-[var(--border-primary)] shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-sm py-1 min-w-[140px]"
           style={{ left: senderPopup.x, top: senderPopup.y }}
         >
           <div className="px-3 py-1 border-b border-[var(--border-primary)]/50">
@@ -1731,11 +1741,13 @@ const MeshChat = React.memo(function MeshChat(props: MeshChatProps) {
             </>
           )}
         </div>
+        </ModalPortal>
       )}
 
       {/* ─── MUTE CONFIRMATION DIALOG ─── */}
       {muteConfirm && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] p-4 max-w-[260px] w-full">
             <div className="text-sm font-mono text-[var(--text-secondary)] mb-1">
               CONFIRM MUTE
@@ -1763,6 +1775,7 @@ const MeshChat = React.memo(function MeshChat(props: MeshChatProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );
