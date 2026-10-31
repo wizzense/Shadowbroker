@@ -184,6 +184,13 @@ export function setBackendStatus(next: BackendStatus) {
   for (const fn of statusListeners) fn();
 }
 
+/** Non-reactive read of the live store — the same data the map renders. Used by
+ *  agent tools (lib/webmcp) that read on demand and must not subscribe a React
+ *  component to every poll. Callers must treat the result as read-only. */
+export function readDataStore(): Readonly<Record<string, unknown>> {
+  return store;
+}
+
 // ── Read API (hooks) ─────────────────────────────────────────────────────
 
 /** Subscribe to a single data key.  Component only re-renders when that key's
