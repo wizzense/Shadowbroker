@@ -24,6 +24,40 @@ const RELEASE_TITLE = 'GT Analytics + Telegram Translate + Full Telemetry + Save
 
 const HEADLINE_FEATURES = [
   {
+    icon: <MessageSquare size={20} className="text-cyan-400" />,
+    accent: 'cyan' as const,
+    title: 'Ask the Map — Agent Chat + WebMCP',
+    subtitle:
+      'Prompt the board: an agent answers from every layer, civic data and the threat feed, on your own local awdk daemon, the hosted plane, GobboNet, or Bonsai running in your browser (WebGPU).',
+    details: [
+      'Ten-plus read-only tools (search entities, entities in view, news feed, elections, officials, local governments, civic layers) plus map actions (fly to, show, toggle layer).',
+      'The same tools are published to browser agents through WebMCP (navigator.modelContext) where the browser supports it.',
+      'Live progress: phase, elapsed time and tokens generated; tool calls are shown and collapsible.',
+    ],
+    callToAction: 'PANELS → AGENT CHAT — ASK THE MAP',
+  },
+  {
+    icon: <Radar size={20} className="text-purple-400" />,
+    accent: 'purple' as const,
+    title: 'Civic Atlas — Officials, Elections, Districts',
+    subtitle:
+      'Who represents any US point (federal, state, county, city, school board), upcoming elections with how-to-vote links, district boundaries, license-plate readers, data centers and federal spending.',
+    details: [
+      'Civic layers follow what is on screen and load state-wide when zoomed out; a coverage badge says what area is loaded.',
+      'ALPR, data-center and federal-project points are clickable with detail cards; the legend lists every civic layer.',
+    ],
+    callToAction: 'LEFT PANEL → CIVIC & ELECTIONS',
+  },
+  {
+    icon: <Radar size={20} className="text-purple-400" />,
+    accent: 'purple' as const,
+    title: 'Panel Workspace',
+    subtitle:
+      'Every panel can be dragged, resized, collapsed, maximized, popped out to its own window and docked back; layouts persist with presets, Tile and Cascade.',
+    details: ['DATA LAYERS has a search box and an ACTIVE-only toggle.'],
+    callToAction: 'TOP BAR → PANELS',
+  },
+  {
     icon: <Radar size={20} className="text-purple-400" />,
     accent: 'purple' as const,
     title: 'GT Analytics & Strategic Risk Layer',
