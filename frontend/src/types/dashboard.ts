@@ -1318,6 +1318,9 @@ export interface ActiveLayers {
   civic_school_districts: boolean;
   civic_counties: boolean;
   civic_places: boolean;
+  // AitherOS Digital Twin Town (/api/civic-proxy/town; residents are simulated)
+  twin_town: boolean;
+  twin_town_news: boolean;
 }
 
 export interface SelectedEntity {

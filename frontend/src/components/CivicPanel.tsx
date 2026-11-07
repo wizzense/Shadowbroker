@@ -34,6 +34,7 @@ import {
   type CivicLookupRequest,
   type CivicUnitsAnswer,
 } from '@/lib/civicDirectory';
+import { setResolvedTwinCounty } from '@/lib/twinTown';
 
 interface Props {
   layerEnabled?: boolean;
@@ -165,6 +166,8 @@ export default function CivicPanel({ layerEnabled = false }: Props) {
       }
       const district = lookupCongressionalDistrict(lookup);
       const county = lookupCountyFips(lookup);
+      // The twin town asks for this county (not a circle) while its point is on screen.
+      setResolvedTwinCounty(county ? { state: lookup.state, county, lat: request.lat, lng: request.lng } : null);
       const [elections, units] = await Promise.allSettled([
         getJson<CivicElectionsAnswer>(civicElectionsUrl(lookup.state, district), 'Elections', signal),
         county ? getJson<CivicUnitsAnswer>(civicUnitsUrl(lookup.state, county), 'Local governments', signal) : Promise.resolve(null),

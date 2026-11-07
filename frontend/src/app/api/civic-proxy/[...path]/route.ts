@@ -2,7 +2,7 @@
  * AitherOS Civic Atlas proxy — GET only, allowlisted routes.
  *
  * Routes (validation lives in `lib/civicDirectory.ts::resolveCivicProxyRequest`):
- *   /api/civic-proxy/{alpr|datacenters|projects}   point layers (/civic/layers/*)
+ *   /api/civic-proxy/{alpr|datacenters|projects|town}  point layers (/civic/layers/*)
  *   /api/civic-proxy/lookup?lat=&lng=              districts + officials (no addresses)
  *   /api/civic-proxy/how-to-vote/{STATE}
  *   /api/civic-proxy/geojson/{layer}?state=XX       district boundaries
@@ -28,6 +28,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveCivicProxyRequest, type CivicRouteKind } from '@/lib/civicDirectory';
+import { cloudflareClientIp } from '@/lib/server/civicClientIp';
 
 /** Serve a cached copy this long after a failed refresh. */
 const MIN_STALE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -51,6 +52,12 @@ const upstreamBlockedUntil = new Map<CivicRouteKind, number>();
 
 function civicApiBase(): string {
   return (process.env.CIVIC_API_BASE || 'https://app.aitherium.com/api/civic').replace(/\/+$/, '');
+}
+
+/** Pass a sane upstream Retry-After (seconds) through; drop anything else. */
+function retryAfterHeader(res: Response): Record<string, string> {
+  const v = res.headers.get('retry-after');
+  return v && /^\d{1,4}$/.test(v) ? { 'Retry-After': v } : {};
 }
 
 function forget(key: string): void {
@@ -112,18 +119,36 @@ export async function GET(
     );
   }
 
+  const clientIp = cloudflareClientIp(req.headers);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), route.timeoutMs);
   try {
     const res = await fetch(upstreamUrl, {
-      headers: { Accept: 'application/json', 'User-Agent': 'AitherShadowBroker/1.0' },
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'AitherShadowBroker/1.0',
+        ...(clientIp ? { 'CF-Connecting-IP': clientIp } : {}),
+      },
       signal: controller.signal,
       cache: 'no-store',
     });
     const body = await res.text();
     const contentType = res.headers.get('content-type') || 'application/json';
+    // 202 = "warming": the upstream is preparing this area (twin town). It is a
+    // progress report, not an answer — pass it through, never cache it, and
+    // never let it shadow a real answer we already hold.
+    if (res.status === 202) {
+      if (usableStale(cached)) return serveCached(cached, 'stale');
+      return new NextResponse(body, {
+        status: 202,
+        headers: { 'Content-Type': contentType, 'Cache-Control': 'no-store', ...retryAfterHeader(res) },
+      });
+    }
     if (!res.ok) {
-      if (res.status === 429 || res.status === 503) {
+      // A 429 for a forwarded visitor is THAT visitor's quota: it must not
+      // silence the route for everyone else. Without a visitor IP the proxy is
+      // the one bucket, so back off for all.
+      if (res.status === 503 || (res.status === 429 && !clientIp)) {
         upstreamBlockedUntil.set(route.kind, Date.now() + UPSTREAM_COOLDOWN_MS);
       }
       if (usableStale(cached)) {
@@ -134,7 +159,11 @@ export async function GET(
       const passThrough = [404, 422, 429, 503].includes(res.status);
       return new NextResponse(body, {
         status: passThrough ? res.status : 502,
-        headers: { 'Content-Type': contentType, 'Cache-Control': 'no-store' },
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'no-store',
+          ...(res.status === 429 || res.status === 503 ? retryAfterHeader(res) : {}),
+        },
       });
     }
     remember(upstreamUrl, { body, contentType, storedAt: Date.now(), ttlMs: route.ttlMs });

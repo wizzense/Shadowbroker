@@ -223,7 +223,9 @@
     "civicStateHouse": "州众议院选区",
     "civicSchoolDistricts": "学区",
     "civicCounties": "县",
-    "civicPlaces": "城市与城镇"
+    "civicPlaces": "城市与城镇",
+    "twinTown": "数字孪生城镇",
+    "twinTownNews": "城镇新闻"
   },
   "gtLean": {
     "title": "在低配节点上启用衍生 OSINT？",
