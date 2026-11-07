@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import RoadCorridorLayerControls from '@/components/RoadCorridorLayerControls';
 import CivicCoverageBadge from '@/components/CivicCoverageBadge';
+import TwinTownChip from '@/components/TwinTownChip';
 import { API_BASE } from '@/lib/api';
 import { useLiveUamapScraperOptIn } from '@/hooks/useLiveUamapScraperOptIn';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -138,6 +139,8 @@ const FRESHNESS_MAP: Record<string, string> = {
   civic_school_districts: '',
   civic_counties: '',
   civic_places: '',
+  twin_town: '',
+  twin_town_news: '',
 };
 
 // POTUS fleet ICAO hex codes for client-side filtering
@@ -1499,6 +1502,20 @@ const WorldviewLeftPanel = React.memo(function WorldviewLeftPanel({
           count: null,
           icon: MapPin,
         },
+        {
+          id: 'twin_town',
+          name: t('layers.twinTown'),
+          source: 'AitherOS Civic · simulated residents',
+          count: null,
+          icon: Landmark,
+        },
+        {
+          id: 'twin_town_news',
+          name: t('layers.twinTownNews'),
+          source: 'AitherOS Civic · local happenings',
+          count: null,
+          icon: Landmark,
+        },
       ],
     },
     {
@@ -1943,6 +1960,7 @@ const WorldviewLeftPanel = React.memo(function WorldviewLeftPanel({
                 )}
 
                 <CivicCoverageBadge />
+                <TwinTownChip />
                 {layerFilterOn && visibleSections.length === 0 && (
                   <div className="text-[11px] font-mono text-[var(--text-muted)] tracking-wider">
                     No layers match{layerQuery ? ` "${layerQuery}"` : ''}

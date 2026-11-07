@@ -100,6 +100,8 @@ export function getDefaultActiveLayers(): ActiveLayers {
     civic_school_districts: false,
     civic_counties: false,
     civic_places: false,
+    twin_town: false,
+    twin_town_news: false,
   };
 }
 

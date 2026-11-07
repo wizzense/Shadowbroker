@@ -223,7 +223,9 @@
     "civicStateHouse": "Circonscriptions de la Chambre de l'État",
     "civicSchoolDistricts": "Districts scolaires",
     "civicCounties": "Comtés",
-    "civicPlaces": "Villes et communes"
+    "civicPlaces": "Villes et communes",
+    "twinTown": "Ville jumelle numérique",
+    "twinTownNews": "Actualités de la ville"
   },
   "gtLean": {
     "title": "Activer l'OSINT dérivé sur un nœud limité ?",

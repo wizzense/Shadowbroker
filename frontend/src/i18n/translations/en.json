@@ -223,7 +223,9 @@
     "civicStateHouse": "State house districts",
     "civicSchoolDistricts": "School districts",
     "civicCounties": "Counties",
-    "civicPlaces": "Cities & towns"
+    "civicPlaces": "Cities & towns",
+    "twinTown": "Digital Twin Town",
+    "twinTownNews": "Town news"
   },
   "gtLean": {
     "title": "Enable Derived OSINT on a lean node?",

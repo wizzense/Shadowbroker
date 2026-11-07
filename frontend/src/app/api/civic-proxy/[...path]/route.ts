@@ -2,7 +2,7 @@
  * AitherOS Civic Atlas proxy — GET only, allowlisted routes.
  *
  * Routes (validation lives in `lib/civicDirectory.ts::resolveCivicProxyRequest`):
- *   /api/civic-proxy/{alpr|datacenters|projects}   point layers (/civic/layers/*)
+ *   /api/civic-proxy/{alpr|datacenters|projects|town}  point layers (/civic/layers/*)
  *   /api/civic-proxy/lookup?lat=&lng=              districts + officials (no addresses)
  *   /api/civic-proxy/how-to-vote/{STATE}
  *   /api/civic-proxy/geojson/{layer}?state=XX       district boundaries
@@ -122,6 +122,21 @@ export async function GET(
     });
     const body = await res.text();
     const contentType = res.headers.get('content-type') || 'application/json';
+    // 202 = "warming": the upstream is preparing this area (twin town). It is a
+    // progress report, not an answer — pass it through, never cache it, and
+    // never let it shadow a real answer we already hold.
+    if (res.status === 202) {
+      if (usableStale(cached)) return serveCached(cached, 'stale');
+      const retryAfter = res.headers.get('retry-after');
+      return new NextResponse(body, {
+        status: 202,
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'no-store',
+          ...(retryAfter && /^\d{1,4}$/.test(retryAfter) ? { 'Retry-After': retryAfter } : {}),
+        },
+      });
+    }
     if (!res.ok) {
       if (res.status === 429 || res.status === 503) {
         upstreamBlockedUntil.set(route.kind, Date.now() + UPSTREAM_COOLDOWN_MS);

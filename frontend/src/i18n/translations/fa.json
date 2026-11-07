@@ -223,7 +223,9 @@
     "civicStateHouse": "حوزه‌های مجلس ایالتی",
     "civicSchoolDistricts": "مناطق آموزشی",
     "civicCounties": "شهرستان‌ها",
-    "civicPlaces": "شهرها و شهرک‌ها"
+    "civicPlaces": "شهرها و شهرک‌ها",
+    "twinTown": "شهر دوقلوی دیجیتال",
+    "twinTownNews": "اخبار شهر"
   },
   "gtLean": {
     "title": "فعال‌سازی OSINT استنتاجی روی یک گره با منابع محدود؟",

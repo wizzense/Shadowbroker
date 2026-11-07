@@ -16,8 +16,11 @@
 
 // ─── Proxy allowlist ────────────────────────────────────────────────────────
 
-/** Point layers served by Genesis `routers/civic_layers.py` under /civic/layers. */
-export const CIVIC_POINT_LAYERS = ['alpr', 'datacenters', 'projects'] as const;
+/**
+ * Point layers served by Genesis `routers/civic_layers.py` under /civic/layers.
+ * `town` is the Digital Twin Town layer (`lib/twinTown.ts`).
+ */
+export const CIVIC_POINT_LAYERS = ['alpr', 'datacenters', 'projects', 'town'] as const;
 const POINT_LAYER_QUERY_KEYS = new Set(['lat', 'lng', 'radius_km', 'state', 'county', 'cd', 'format', 'leads']);
 
 /** `lib/civic/boundaries.py` LAYERS, verbatim. */
@@ -108,7 +111,8 @@ export function resolveCivicProxyRequest(segments: string[], params: URLSearchPa
         kind: 'layer',
         upstreamPath: `/layers/${head}`,
         query: search.toString(),
-        ttlMs: 15 * MINUTE,
+        // The twin town moves by the hour (who is where); the other layers barely change.
+        ttlMs: head === 'town' ? 5 * MINUTE : 15 * MINUTE,
         // A cold state-wide projects answer is a USAspending query upstream
         // (measured >20 s for IN; Genesis allows 45 s).
         timeoutMs: head === 'projects' ? 50000 : 20000,

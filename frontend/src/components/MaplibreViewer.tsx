@@ -189,6 +189,12 @@ import { sameEntityId } from '@/components/map/featureIds';
 import { buildCctvProxyUrl } from '@/lib/cctvProxy';
 import { sanitizeSubmarineCables } from '@/lib/submarineCables';
 import { useCivicLayers } from '@/components/map/hooks/useCivicLayers';
+import { useTwinTown } from '@/components/map/hooks/useTwinTown';
+import TwinTownLayers, {
+  TwinNewsList,
+  TwinVenuePopupBody,
+  twinTownInteractiveIds,
+} from '@/components/map/TwinTownLayers';
 import { useCivicBoundaries } from '@/components/map/hooks/useCivicBoundaries';
 import CivicBoundaryLayers, { civicBoundaryInteractiveIds } from '@/components/map/CivicBoundaryLayers';
 import { civicLookupFromMapClick, dispatchCivicLookup } from '@/lib/civicDirectory';
@@ -1246,6 +1252,8 @@ const MaplibreViewer = ({
   // AitherOS Civic Atlas layers (ALPR readers, data centers, federal spending).
   // Area-scoped upstream, so the hook follows the committed viewport.
   const civicLayers = useCivicLayers(activeLayers);
+  const twinTown = useTwinTown(activeLayers);
+  const twinTownShow = { venues: !!activeLayers.twin_town, news: !!activeLayers.twin_town_news };
   // Civic district boundaries for the state(s) in view; clicking one asks who represents there.
   const civicBoundaries = useCivicBoundaries(activeLayers);
 
@@ -1815,6 +1823,7 @@ const MaplibreViewer = ({
     correlationsGeoJSON && 'corr-analysis-fill',
     gtRiskGeoJSON && 'gt-risk-heatmap',
   ...civicBoundaryInteractiveIds(civicBoundaries),
+  ...twinTownInteractiveIds(twinTown, twinTownShow),
   ].filter(Boolean) as string[];
 
   useEffect(() => {
@@ -3991,6 +4000,9 @@ const MaplibreViewer = ({
         {/* AitherOS Civic Atlas — district boundaries (TIGERweb via AitherOS) */}
         <CivicBoundaryLayers state={civicBoundaries} />
 
+        {/* AitherOS Digital Twin Town — simulated residents at real venues, plus local news */}
+        <TwinTownLayers state={twinTown} show={twinTownShow} />
+
         {/* AitherOS Civic Atlas — ALPR readers (source: AitherOS civic cache) */}
         <Source
           id="civic-alpr-source"
@@ -5623,6 +5635,33 @@ const MaplibreViewer = ({
                     </span>
                   </div>
                 </div>
+              </Popup>
+            );
+          })()}
+
+        {/* AitherOS Digital Twin Town click popups — a venue, or the area's town news */}
+        {(selectedEntity?.type === 'twin_venue' || selectedEntity?.type === 'twin_news') &&
+          (() => {
+            const p = (selectedEntity.extra || {}) as Record<string, unknown>;
+            const lat = Number(p.lat);
+            const lng = Number(p.lng);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            const close = () => onEntityClick?.(null);
+            return (
+              <Popup
+                longitude={lng}
+                latitude={lat}
+                closeButton={false}
+                closeOnClick={false}
+                onClose={close}
+                className="threat-popup"
+                maxWidth="320px"
+              >
+                {selectedEntity.type === 'twin_venue' ? (
+                  <TwinVenuePopupBody props={p} onClose={close} />
+                ) : (
+                  <TwinNewsList items={twinTown.data?.news ?? []} onClose={close} />
+                )}
               </Popup>
             );
           })()}
