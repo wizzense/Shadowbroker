@@ -32,6 +32,8 @@ export const TWIN_MAX_VENUES = 500;
 export const TWIN_MAX_NEWS = 20;
 export const TWIN_SYNTHETIC_NOTE = 'Residents are simulated twins, not real people.';
 export const TWIN_WARMING_MESSAGE = 'Twin town warming up for this area';
+/** Upstream 429: this visitor's anonymous quota of new areas is spent for today. */
+export const TWIN_QUOTA_MESSAGE = "Too many new areas today — try a place you've visited";
 
 /** Warming retry: 5 s, 10 s, 20 s, then every 30 s; give up after 5 minutes. */
 export const TWIN_WARMING_FIRST_DELAY_MS = 5000;
@@ -111,6 +113,17 @@ export function twinTownUrl(area: TwinTownArea): string {
 export function twinWarmingDelayMs(attempt: number): number {
   const n = Math.max(0, Math.floor(attempt));
   return Math.min(TWIN_WARMING_MAX_DELAY_MS, TWIN_WARMING_FIRST_DELAY_MS * 2 ** Math.min(n, 10));
+}
+
+/**
+ * Delay before retry `attempt` after a 202 or a 503: the warming backoff, but
+ * never sooner than the upstream's Retry-After (seconds), and never past the
+ * give-up window.
+ */
+export function twinRetryDelayMs(attempt: number, retryAfter: string | null | undefined): number {
+  const backoff = twinWarmingDelayMs(attempt);
+  const s = retryAfter && /^\d{1,5}$/.test(retryAfter.trim()) ? Number(retryAfter.trim()) : 0;
+  return Math.min(TWIN_WARMING_GIVE_UP_MS, Math.max(backoff, s * 1000));
 }
 
 // ─── Sanitising ─────────────────────────────────────────────────────────────

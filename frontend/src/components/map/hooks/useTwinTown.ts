@@ -8,7 +8,9 @@
  * only when that area changes, debounced after a pan or a fly-to. A 202
  * {"status":"warming"} answer means the upstream is preparing the area: the
  * chip says so and the hook retries with backoff (5 s doubling, capped at
- * 30 s) for at most 5 minutes, then gives up until the view moves.
+ * 30 s, never sooner than a Retry-After) for at most 5 minutes, then gives up
+ * until the view moves. A 503 with Retry-After is treated the same way. A 429
+ * means this visitor's quota of new areas is spent: say so and stop.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -18,11 +20,12 @@ import { VIEWPORT_COMMITTED_EVENT, VISIBLE_VIEW_EVENT } from '@/components/map/h
 import {
   sanitizeTwinTown,
   setTwinTownStatus,
+  TWIN_QUOTA_MESSAGE,
   TWIN_WARMING_GIVE_UP_MS,
   twinTownAreaFromBounds,
   twinTownAreaKey,
   twinTownUrl,
-  twinWarmingDelayMs,
+  twinRetryDelayMs,
   type TwinTownData,
   type TwinTownLayerKey,
 } from '@/lib/twinTown';
@@ -59,7 +62,15 @@ export function useTwinTown(activeLayers: Pick<ActiveLayers, TwinTownLayerKey>):
       try {
         const res = await fetch(url, { signal, headers: { Accept: 'application/geo+json, application/json' } });
         if (cancelled || signal.aborted) return;
-        if (res.status === 202) {
+        if (res.status === 429) {
+          // This visitor's quota of new areas is spent; retrying only spends more.
+          setState((prev) => ({ ...prev, loading: false, warming: false, error: TWIN_QUOTA_MESSAGE }));
+          setTwinTownStatus({ phase: 'unavailable', message: TWIN_QUOTA_MESSAGE });
+          areaKeyRef.current = null;
+          return;
+        }
+        // 202 = warming; a 503 that names a Retry-After is the same "not yet".
+        if (res.status === 202 || (res.status === 503 && res.headers.get('retry-after'))) {
           if (Date.now() - startedAt >= TWIN_WARMING_GIVE_UP_MS) {
             const message = 'Twin town is not ready for this area yet.';
             setState((prev) => ({ ...prev, loading: false, warming: false, error: message }));
@@ -70,7 +81,8 @@ export function useTwinTown(activeLayers: Pick<ActiveLayers, TwinTownLayerKey>):
           }
           setState((prev) => ({ ...prev, loading: false, warming: true, error: null }));
           setTwinTownStatus({ phase: 'warming' });
-          retry = setTimeout(() => void fetchArea(url, attempt + 1, startedAt, signal), twinWarmingDelayMs(attempt));
+          const delay = twinRetryDelayMs(attempt, res.headers.get('retry-after'));
+          retry = setTimeout(() => void fetchArea(url, attempt + 1, startedAt, signal), delay);
           return;
         }
         if (!res.ok) throw new Error(`twin town ${res.status}`);

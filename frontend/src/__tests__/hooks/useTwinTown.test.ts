@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTwinTown } from '@/components/map/hooks/useTwinTown';
 import { announceViewTarget } from '@/components/map/hooks/useViewportBounds';
 import { setVisibleViewBounds } from '@/lib/liveDataViewport';
-import { getTwinTownStatus, setResolvedTwinCounty, TWIN_WARMING_GIVE_UP_MS } from '@/lib/twinTown';
+import {
+  getTwinTownStatus,
+  setResolvedTwinCounty,
+  TWIN_QUOTA_MESSAGE,
+  TWIN_WARMING_GIVE_UP_MS,
+  TWIN_WARMING_MESSAGE,
+} from '@/lib/twinTown';
 
 const TOWN = JSON.stringify({
   type: 'FeatureCollection',
@@ -112,5 +118,42 @@ describe('useTwinTown', () => {
     expect(result.current.warming).toBe(false);
     expect(result.current.error).toMatch(/not ready/);
     expect(getTwinTownStatus().phase).toBe('unavailable');
+  });
+
+  it('on 429 shows the quota message and does not retry', async () => {
+    fetchMock.mockImplementation(async () => new Response('{"detail":"quota"}', { status: 429 }));
+    const { result } = renderHook(() => useTwinTown({ twin_town: true, twin_town_news: false }));
+    await tick(0);
+    await tick(120000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBe(TWIN_QUOTA_MESSAGE);
+    expect(getTwinTownStatus()).toEqual({ phase: 'unavailable', message: TWIN_QUOTA_MESSAGE });
+  });
+
+  it('treats 503 + Retry-After like warming, never retrying sooner than Retry-After', async () => {
+    fetchMock.mockImplementationOnce(
+      async () => new Response('{"detail":"busy"}', { status: 503, headers: { 'Retry-After': '20' } }),
+    );
+    const { result } = renderHook(() => useTwinTown({ twin_town: true, twin_town_news: false }));
+    await tick(0);
+    expect(result.current.warming).toBe(true);
+    expect(getTwinTownStatus().phase).toBe('warming');
+    expect(TWIN_WARMING_MESSAGE).toMatch(/warming up/);
+    // Backoff alone would retry at 5 s; Retry-After says 20 s.
+    await tick(19000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await tick(1500);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.data?.town?.name).toBe('Twinford');
+  });
+
+  it('a 503 without Retry-After is an outage, not warming', async () => {
+    fetchMock.mockImplementation(async () => new Response('{}', { status: 503 }));
+    const { result } = renderHook(() => useTwinTown({ twin_town: true, twin_town_news: false }));
+    await tick(0);
+    await tick(60000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.warming).toBe(false);
+    expect(result.current.error).toBe('Twin town unavailable');
   });
 });
