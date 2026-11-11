@@ -6,6 +6,20 @@
   </p>
 </p>
 
+
+> **About this fork.** This is the fork that runs **https://shadowbroker.aitherium.com**,
+> hosted by Aitherium. It is not the official project: the original is
+> [BigBodyCobain/Shadowbroker](https://github.com/BigBodyCobain/Shadowbroker)
+> ([shadowbroker.dev](https://shadowbroker.dev)), and all credit for Shadowbroker is theirs.
+>
+> **What we changed:** `SHADOWBROKER_PUBLIC_READ_ROUTES` (off by default). When on, anonymous
+> visitors can read the public map data (layers, pins, Time Machine snapshots, scraper and
+> market status). API keys, the agent shell, wormhole/mesh control and every write still
+> need the operator key. See PR #2 and `backend/tests/test_public_read_routes.py`.
+>
+> **Source (AGPL-3.0, section 13):** the hosted site runs this repository's `main`. Changes we
+> make for the hosted instance land here first, and we offer generally useful ones upstream.
+
 ---
 
 
