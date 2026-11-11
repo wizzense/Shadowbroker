@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from auth import require_local_operator, require_openclaw_or_local
+from auth import require_local_operator, require_openclaw_or_local, require_public_read_or_openclaw
 from limiter import limiter
 from services.fetchers._store import latest_data as _latest_data
 
@@ -193,7 +193,7 @@ async def create_pins_batch(request: Request, body: PinBatchCreate):
     return {"ok": True, "created": len(pins), "pins": pins}
 
 
-@router.get("/api/ai/pins", dependencies=[Depends(require_openclaw_or_local)])
+@router.get("/api/ai/pins", dependencies=[Depends(require_public_read_or_openclaw)])
 @limiter.limit("60/minute")
 async def list_pins(
     request: Request,
@@ -209,7 +209,7 @@ async def list_pins(
     return {"ok": True, "count": len(pins), "pins": pins}
 
 
-@router.get("/api/ai/pins/geojson", dependencies=[Depends(require_openclaw_or_local)])
+@router.get("/api/ai/pins/geojson", dependencies=[Depends(require_public_read_or_openclaw)])
 @limiter.limit("60/minute")
 async def pins_geojson(request: Request, layer_id: str = ""):
     """Export all active AI Intel pins as GeoJSON for the map layer."""
@@ -1098,7 +1098,7 @@ async def take_snapshot(request: Request, body: dict = None):
     return result
 
 
-@router.get("/api/ai/timemachine/snapshots", dependencies=[Depends(require_openclaw_or_local)])
+@router.get("/api/ai/timemachine/snapshots", dependencies=[Depends(require_public_read_or_openclaw)])
 @limiter.limit("60/minute")
 async def list_snapshots(
     request: Request,
@@ -1137,7 +1137,7 @@ async def list_snapshots(
     return {"ok": True, "count": len(results), "snapshots": results}
 
 
-@router.get("/api/ai/timemachine/snapshot/{snapshot_id}", dependencies=[Depends(require_openclaw_or_local)])
+@router.get("/api/ai/timemachine/snapshot/{snapshot_id}", dependencies=[Depends(require_public_read_or_openclaw)])
 @limiter.limit("30/minute")
 async def get_snapshot(
     request: Request,
@@ -1172,7 +1172,7 @@ async def get_snapshot(
     raise HTTPException(404, f"Snapshot '{snapshot_id}' not found")
 
 
-@router.get("/api/ai/timemachine/hourly-index", dependencies=[Depends(require_openclaw_or_local)])
+@router.get("/api/ai/timemachine/hourly-index", dependencies=[Depends(require_public_read_or_openclaw)])
 @limiter.limit("60/minute")
 async def timemachine_hourly_index(request: Request):
     """Return snapshot availability per hour for the last 24h.
@@ -1201,7 +1201,7 @@ async def timemachine_hourly_index(request: Request):
     return {"ok": True, "hours": hours}
 
 
-@router.get("/api/ai/timemachine/playback/{snapshot_id}", dependencies=[Depends(require_openclaw_or_local)])
+@router.get("/api/ai/timemachine/playback/{snapshot_id}", dependencies=[Depends(require_public_read_or_openclaw)])
 @limiter.limit("30/minute")
 async def timemachine_playback(request: Request, snapshot_id: str):
     """Load a snapshot's data in the same shape as /api/live-data/* for map rendering.
@@ -1290,7 +1290,7 @@ async def clear_snapshots(
     return {"ok": True, "removed": removed, "remaining": len(_snapshots)}
 
 
-@router.get("/api/ai/timemachine/config", dependencies=[Depends(require_openclaw_or_local)])
+@router.get("/api/ai/timemachine/config", dependencies=[Depends(require_public_read_or_openclaw)])
 @limiter.limit("60/minute")
 async def get_timemachine_config(request: Request):
     """Get current Time Machine configuration."""
