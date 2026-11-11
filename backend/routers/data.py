@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request, Response, Query, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from limiter import limiter
-from auth import require_admin, require_local_operator
+from auth import require_admin, require_local_operator, require_public_read_or_local_operator
 from services.data_fetcher import update_all_data
 import orjson
 import json as json_mod
@@ -477,7 +477,7 @@ async def update_viewport(vp: ViewportUpdate, request: Request):  # noqa: ARG001
     return {"status": "ok"}
 
 
-@router.get("/api/liveuamap/scraper-status", dependencies=[Depends(require_local_operator)])
+@router.get("/api/liveuamap/scraper-status", dependencies=[Depends(require_public_read_or_local_operator)])
 async def api_liveuamap_scraper_status():
     """Whether LiveUAMap Playwright may run (Windows needs UI opt-in unless env forces)."""
     from services.liveuamap_settings import liveuamap_scraper_status
@@ -509,7 +509,7 @@ def _run_liveuamap_refresh() -> None:
         logger.warning("LiveUAMap refresh after opt-in failed: %s", e)
 
 
-@router.get("/api/prediction-markets/status", dependencies=[Depends(require_local_operator)])
+@router.get("/api/prediction-markets/status", dependencies=[Depends(require_public_read_or_local_operator)])
 async def api_prediction_markets_status():
     """Whether Polymarket/Kalshi fetches and news market correlation are enabled."""
     from services.prediction_markets_settings import prediction_markets_status
@@ -566,7 +566,7 @@ def _run_prediction_markets_disable() -> None:
         logger.warning("Prediction markets disable cleanup failed: %s", e)
 
 
-@router.get("/api/layers", dependencies=[Depends(require_local_operator)])
+@router.get("/api/layers", dependencies=[Depends(require_public_read_or_local_operator)])
 async def get_layers(request: Request):
     """Report operator layer state plus any live overrides.
 

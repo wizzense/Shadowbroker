@@ -379,6 +379,40 @@ def require_local_operator(request: Request):
     raise HTTPException(status_code=403, detail="Forbidden — local operator access only")
 
 
+def _public_read_routes_enabled() -> bool:
+    """Opt-in: serve the side-effect-free public map reads without operator auth.
+
+    A public deployment (the dashboard reachable from the internet behind a
+    reverse proxy) wants anonymous visitors to see the layer list, AI Intel
+    pins and Time Machine snapshots, but must NOT hand them the operator
+    surface (API keys, agent shell, wormhole/mesh control, any write).
+    Turning on Docker-bridge operator trust would do the latter, so this flag
+    exists instead. Default off: upstream behaviour is unchanged.
+
+    Only routes that explicitly declare ``require_public_read_or_local_operator``
+    or ``require_public_read_or_openclaw`` are affected, and only for GET/HEAD.
+    """
+    return str(os.environ.get("SHADOWBROKER_PUBLIC_READ_ROUTES", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _is_public_read_request(request: Request) -> bool:
+    return _public_read_routes_enabled() and str(request.method or "").upper() in {"GET", "HEAD"}
+
+
+def require_public_read_or_local_operator(request: Request):
+    """Like ``require_local_operator``, but lets anonymous GETs through when
+    ``SHADOWBROKER_PUBLIC_READ_ROUTES`` is on. Attach ONLY to side-effect-free
+    GET routes whose response is already-public map data."""
+    if _is_public_read_request(request):
+        return
+    require_local_operator(request)
+
+
 # ---------------------------------------------------------------------------
 # OpenClaw HMAC authentication
 # ---------------------------------------------------------------------------
@@ -530,6 +564,15 @@ async def require_openclaw_or_local(request: Request):
         return
 
     raise HTTPException(status_code=403, detail="Forbidden — authentication required")
+
+
+async def require_public_read_or_openclaw(request: Request):
+    """Like ``require_openclaw_or_local``, but lets anonymous GETs through when
+    ``SHADOWBROKER_PUBLIC_READ_ROUTES`` is on. Attach ONLY to side-effect-free
+    GET routes whose response is already-public map data."""
+    if _is_public_read_request(request):
+        return
+    await require_openclaw_or_local(request)
 
 
 # ---------------------------------------------------------------------------
