@@ -1,5 +1,6 @@
 import type { ActiveLayers } from '@/types/dashboard';
 import { API_BASE } from '@/lib/api';
+import { hasOperatorAccess } from '@/lib/operatorAccess';
 
 export const LAYER_PREFERENCES_STORAGE_KEY = 'sb_active_layers_v1';
 export const DASHBOARD_PREFS_STORAGE_KEY = 'sb_dashboard_prefs_v1';
@@ -240,7 +241,7 @@ export async function reconcileActiveLayersWithBackend(): Promise<'synced' | 'no
     const backendAtDefaults = layerMapsEqual(backend, defaults);
     const shouldRepair = mismatch && backendAtDefaults && !repairedDefaultBackendState;
 
-    if (shouldRepair) {
+    if (shouldRepair && (await hasOperatorAccess())) {
       const syncResponse = await fetch(`${API_BASE}/api/layers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

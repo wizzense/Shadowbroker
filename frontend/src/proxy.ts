@@ -208,6 +208,12 @@ export function proxy(request: NextRequest) {
   if (!strictCsp && process.env.NODE_ENV === 'production') {
     response.headers.set('Content-Security-Policy-Report-Only', buildCsp(nonce, true));
   }
+  // no-transform: a CDN in front (Cloudflare) must not rewrite the document,
+  // e.g. auto-inject a third-party analytics beacon the CSP would then block.
+  response.headers.set(
+    'Cache-Control',
+    'private, no-cache, no-store, max-age=0, must-revalidate, no-transform',
+  );
 
   return response;
 }

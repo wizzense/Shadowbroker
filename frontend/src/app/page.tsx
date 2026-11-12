@@ -32,6 +32,7 @@ import GlobalTicker from '@/components/GlobalTicker';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import OnboardingModal, { useOnboarding } from '@/components/OnboardingModal';
 import { useOperatorAccess } from '@/hooks/useOperatorAccess';
+import { operatorFetch } from '@/lib/operatorAccess';
 import ChangelogModal, { markChangelogSeen, useChangelog } from '@/components/ChangelogModal';
 import StartupWarmupModal, { useStartupWarmupNotice } from '@/components/StartupWarmupModal';
 import type { ActiveLayers, KiwiSDR, Scanner, SelectedEntity } from '@/types/dashboard';
@@ -344,8 +345,10 @@ function DashboardInner() {
   const initialLayerSyncRef = useRef(false);
   useEffect(() => {
     if (!secondaryBootReady || !layerPrefsHydrated) return;
+    // POST /api/layers flips the backend's global fetcher gates: operator only.
+    // A public visitor's toggles stay client-side (operatorFetch makes no request).
     const syncLayers = (triggerRefetch: boolean) =>
-      fetch(`${API_BASE}/api/layers`, {
+      operatorFetch(`${API_BASE}/api/layers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ layers: activeLayers }),
