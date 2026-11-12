@@ -1,4 +1,5 @@
 import { API_BASE } from '@/lib/api';
+import { invalidateOperatorAccess } from '@/lib/operatorAccess';
 
 let hasPrimedSessionHint = false;
 
@@ -44,10 +45,12 @@ export async function primeAdminSession(adminKey?: string): Promise<void> {
     throw new Error(data?.detail || data?.message || 'admin_session_failed');
   }
   hasPrimedSessionHint = true;
+  invalidateOperatorAccess();
 }
 
 export async function clearAdminSession(): Promise<void> {
   hasPrimedSessionHint = false;
+  invalidateOperatorAccess();
   if (typeof window !== 'undefined') {
     try {
       sessionStorage.removeItem('sb_admin_key');

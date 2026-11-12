@@ -31,6 +31,7 @@ import AgentPromptOpener from '@/components/panels/AgentPromptOpener';
 import GlobalTicker from '@/components/GlobalTicker';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import OnboardingModal, { useOnboarding } from '@/components/OnboardingModal';
+import { useOperatorAccess } from '@/hooks/useOperatorAccess';
 import ChangelogModal, { markChangelogSeen, useChangelog } from '@/components/ChangelogModal';
 import StartupWarmupModal, { useStartupWarmupNotice } from '@/components/StartupWarmupModal';
 import type { ActiveLayers, KiwiSDR, Scanner, SelectedEntity } from '@/types/dashboard';
@@ -560,6 +561,8 @@ function DashboardInner() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
   const { showWarmupNotice, setShowWarmupNotice } = useStartupWarmupNotice();
   const { showChangelog, setShowChangelog } = useChangelog();
+  // Public visitors on a hosted instance see the map, not operator first-run modals.
+  const operatorAccess = useOperatorAccess();
 
   return (
     <>
@@ -1083,12 +1086,12 @@ function DashboardInner() {
         )}
 
         {/* FIRST-RUN WARMUP NOTICE — shows once after onboarding */}
-        {!showOnboarding && showWarmupNotice && (
+        {operatorAccess === true && !showOnboarding && showWarmupNotice && (
           <StartupWarmupModal onClose={() => setShowWarmupNotice(false)} />
         )}
 
         {/* v0.4 CHANGELOG MODAL — shows once per version after onboarding */}
-        {!showOnboarding && !showWarmupNotice && showChangelog && (
+        {operatorAccess === true && !showOnboarding && !showWarmupNotice && showChangelog && (
           <ChangelogModal onClose={() => setShowChangelog(false)} />
         )}
 

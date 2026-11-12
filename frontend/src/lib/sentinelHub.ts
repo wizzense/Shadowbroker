@@ -14,6 +14,7 @@
  */
 
 import { API_BASE } from '@/lib/api';
+import { hasOperatorAccess } from '@/lib/operatorAccess';
 
 // Token exchange proxied through our backend (Copernicus blocks browser CORS).
 const TOKEN_PROXY_URL = `${API_BASE}/api/sentinel/token`;
@@ -46,6 +47,10 @@ export async function checkBackendSentinelStatus(): Promise<boolean> {
 
   _backendStatusPromise = (async () => {
     try {
+      if (!(await hasOperatorAccess())) {
+        _backendCredentialsConfigured = false;
+        return false;
+      }
       const resp = await fetch(`${API_BASE}/api/settings/api-keys`, {
         headers: { Accept: 'application/json' },
       });

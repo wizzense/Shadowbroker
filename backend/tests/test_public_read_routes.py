@@ -27,6 +27,7 @@ PUBLIC_READ_ROUTES = [
     "/api/ai/timemachine/snapshots",
     "/api/ai/timemachine/hourly-index",
     "/api/ai/timemachine/config",
+    "/api/ai/layers",
 ]
 
 # Must stay operator-only even with the flag on.
@@ -39,6 +40,9 @@ OPERATOR_ONLY = [
     ("get", "/api/wormhole/identity", None),
     ("post", "/api/wormhole/connect", {}),
     ("get", "/api/ai/agent-actions", None),  # destructive read (drains the queue)
+    ("get", "/api/settings/timemachine", None),  # archival posture (#253)
+    ("get", "/api/tools/shodan/status", None),
+    ("post", "/api/ai/layers", {"name": "x"}),
     ("post", "/api/layers", {"layers": {"viirs_nightlights": True}}),
     ("post", "/api/prediction-markets/opt-in", {"opted_in": True}),
     ("post", "/api/liveuamap/scraper-opt-in", {"opted_in": True}),
@@ -101,3 +105,30 @@ def test_non_get_never_counts_as_public_read(monkeypatch):
         method = "POST"
 
     assert auth._is_public_read_request(_Req()) is False
+
+
+def test_public_ai_layers_hide_operator_feed_config(remote_client, public_read_on, monkeypatch):
+    import services.ai_pin_store as store
+
+    monkeypatch.setattr(
+        store,
+        "get_layers",
+        lambda: [
+            {
+                "id": "l1",
+                "name": "Watch",
+                "color": "#f00",
+                "visible": True,
+                "pin_count": 2,
+                "feed_url": "https://private.example/feed?token=secret",
+                "feed_interval": 300,
+                "feed_last_fetched": 1.0,
+            }
+        ],
+    )
+    body = remote_client.get("/api/ai/layers").json()
+    assert body["count"] == 1
+    layer = body["layers"][0]
+    assert layer["name"] == "Watch" and layer["pin_count"] == 2
+    for field in ("feed_url", "feed_interval", "feed_last_fetched"):
+        assert field not in layer

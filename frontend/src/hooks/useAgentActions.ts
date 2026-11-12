@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { API_BASE } from '@/lib/api';
+import { hasOperatorAccess } from '@/lib/operatorAccess';
 
 interface AgentAction {
   action: string;
@@ -44,6 +45,8 @@ export function useAgentActions(
 
   const poll = useCallback(async () => {
     try {
+      // Operator-only queue (the read drains it): never poll as a public visitor.
+      if (!(await hasOperatorAccess())) return;
       const res = await fetch(`${API_BASE}/api/ai/agent-actions`);
       if (!res.ok) return;
       const data = await res.json();
