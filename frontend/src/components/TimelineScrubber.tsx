@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useDataKey } from '@/hooks/useDataStore';
 import { API_BASE } from '@/lib/api';
+import { operatorFetch } from '@/lib/operatorAccess';
 import { controlPlaneFetch } from '@/lib/controlPlane';
 import {
   useTimeMachine,
@@ -61,14 +62,14 @@ export default function TimelineScrubber() {
   // Check if Time Machine is enabled + refresh hourly index
   useEffect(() => {
     refreshHourlyIndex();
-    fetch(`${API_BASE}/api/settings/timemachine`)
-      .then((r) => r.json())
+    operatorFetch(`${API_BASE}/api/settings/timemachine`)
+      .then((r) => (r ? r.json() : { enabled: false }))
       .then((d) => setTmEnabled(!!d.enabled))
       .catch(() => {});
     // Re-check every 60s in case user toggles it in settings
     const interval = setInterval(() => {
-      fetch(`${API_BASE}/api/settings/timemachine`)
-        .then((r) => r.json())
+      operatorFetch(`${API_BASE}/api/settings/timemachine`)
+        .then((r) => (r ? r.json() : { enabled: false }))
         .then((d) => setTmEnabled(!!d.enabled))
         .catch(() => {});
     }, 60_000);

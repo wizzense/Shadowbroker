@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useDataKey } from '@/hooks/useDataStore';
 import { API_BASE } from '@/lib/api';
+import { operatorFetch } from '@/lib/operatorAccess';
 import { controlPlaneFetch } from '@/lib/controlPlane';
 import {
   enterSnapshotMode,
@@ -87,8 +88,8 @@ export default function TimelinePanel() {
 
   useEffect(() => {
     const fetchStatus = () => {
-      fetch(`${API_BASE}/api/settings/timemachine`)
-        .then((r) => r.json())
+      operatorFetch(`${API_BASE}/api/settings/timemachine`)
+        .then((r) => (r ? r.json() : { enabled: false }))
         .then((d) => setTmEnabled(!!d.enabled))
         .catch(() => {});
       fetch(`${API_BASE}/api/ai/timemachine/config`)

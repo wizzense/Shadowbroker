@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from '@/lib/motion';
+import { hasOperatorAccess } from '@/lib/operatorAccess';
 import { X, ExternalLink, Key, Shield, Radar, Globe, Satellite, Ship, Radio, Bot, Copy, Check, Network } from 'lucide-react';
 
 const CURRENT_ONBOARDING_VERSION = '0.9.81-agentic-onboarding-1';
@@ -781,10 +782,22 @@ export function useOnboarding() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    const done = localStorage.getItem(STORAGE_KEY);
-    if (!done) {
-      setShowOnboarding(true);
+    let done: string | null = null;
+    try {
+      done = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      /* storage blocked: treat as not done */
     }
+    if (done) return;
+    // Operator setup (paste your OpenSky / AIS keys): a public visitor on a
+    // hosted instance cannot save keys, so never show it to them.
+    let alive = true;
+    void hasOperatorAccess().then((ok) => {
+      if (alive && ok) setShowOnboarding(true);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return { showOnboarding, setShowOnboarding };

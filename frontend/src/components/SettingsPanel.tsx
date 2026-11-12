@@ -1,6 +1,7 @@
 'use client';
 
 import { API_BASE } from '@/lib/api';
+import { operatorFetch } from '@/lib/operatorAccess';
 import { clearAdminSession, hasAdminSession, primeAdminSession } from '@/lib/adminSession';
 import { controlPlaneFetch, controlPlaneJson } from '@/lib/controlPlane';
 import { isNativeProtectedSettingsReady } from '@/lib/nativeProtectedSettings';
@@ -333,8 +334,8 @@ const SettingsPanel = React.memo(function SettingsPanel({
   // Fetch Time Machine status when protocol tab opens
   useEffect(() => {
     if (!isOpen || activeTab !== 'protocol') return;
-    fetch(`${API_BASE}/api/settings/timemachine`)
-      .then((r) => r.json())
+    operatorFetch(`${API_BASE}/api/settings/timemachine`)
+      .then((r) => (r ? r.json() : { enabled: false }))
       .then((d) => setTmEnabled(!!d.enabled))
       .catch(() => {});
   }, [isOpen, activeTab]);

@@ -101,10 +101,18 @@ export async function DELETE(req: NextRequest) {
   return res;
 }
 
+function publicInstance(): boolean {
+  // SHADOWBROKER_LAN_MODE = other devices reach this proxy, so only signed-in
+  // admin sessions get the operator key (see app/api/[...path]/route.ts).
+  return ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.SHADOWBROKER_LAN_MODE || '').trim().toLowerCase(),
+  );
+}
+
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value || '';
   return NextResponse.json(
-    { ok: true, hasSession: hasAdminSessionToken(token) },
+    { ok: true, hasSession: hasAdminSessionToken(token), publicInstance: publicInstance() },
     { headers: NO_STORE_HEADERS },
   );
 }

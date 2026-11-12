@@ -1,4 +1,5 @@
 import { API_BASE } from '@/lib/api';
+import { hasOperatorAccess } from '@/lib/operatorAccess';
 import type {
   ShodanCountResponse,
   ShodanHostResponse,
@@ -22,6 +23,9 @@ async function postJson<T>(path: string, body: JsonBody): Promise<T> {
 }
 
 export async function fetchShodanStatus(): Promise<ShodanStatusResponse> {
+  if (!(await hasOperatorAccess())) {
+    throw new Error('Shodan is available to the instance operator only');
+  }
   const res = await fetch(`${API_BASE}/api/tools/shodan/status`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

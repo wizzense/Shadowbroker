@@ -14,7 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from auth import require_local_operator, require_openclaw_or_local, require_public_read_or_openclaw
+from auth import (
+    _is_public_read_request,
+    require_local_operator,
+    require_openclaw_or_local,
+    require_public_read_or_openclaw,
+)
 from limiter import limiter
 from services.fetchers._store import latest_data as _latest_data
 
@@ -326,13 +331,36 @@ async def api_create_layer(request: Request, body: LayerCreate):
     return {"ok": True, "layer": layer}
 
 
-@router.get("/api/ai/layers", dependencies=[Depends(require_openclaw_or_local)])
+# Feed configuration is operator data (a layer's feed URL can carry a private
+# endpoint or token); a public visitor only needs what the map draws.
+_LAYER_OPERATOR_FIELDS = ("feed_url", "feed_interval", "feed_last_fetched")
+
+
+@router.get("/api/ai/layers", dependencies=[Depends(require_public_read_or_openclaw)])
 @limiter.limit("60/minute")
 async def api_list_layers(request: Request):
-    """List all pin layers with pin counts."""
+    """List all pin layers with pin counts.
+
+    With SHADOWBROKER_PUBLIC_READ_ROUTES on, anonymous GETs are allowed (the
+    AI Intel overlay is display data, like /api/ai/pins) but the feed fields
+    are stripped unless the caller also passes operator auth."""
     from services.ai_pin_store import get_layers as _get_layers
 
     layers = _get_layers()
+    is_operator = True
+    if _is_public_read_request(request):
+        # The dependency let this through without auth; check it once here
+        # (when the flag is off the dependency already authenticated, and a
+        # second HMAC check would trip the nonce replay guard).
+        try:
+            await require_openclaw_or_local(request)
+        except HTTPException:
+            is_operator = False
+    if not is_operator:
+        layers = [
+            {k: v for k, v in layer.items() if k not in _LAYER_OPERATOR_FIELDS}
+            for layer in layers
+        ]
     return {"ok": True, "count": len(layers), "layers": layers}
 
 
